@@ -1,0 +1,1976 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Turnstile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Semi+Condensed:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d1013; --panel:rgba(20,24,29,.86); --line:#3b424c; --ink:#e9edf0; --mute:#97a1ab;
+  --blue:#46b0ff; --red:#ff5a48; --acid:#b6e03c;
+  color-scheme: dark;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: light){ :root:not([data-theme="dark"]){ --panel:rgba(22,26,31,.9); } }
+:root[data-theme="dark"]{ --panel:rgba(20,24,29,.86); }
+*,*::before,*::after{box-sizing:inherit}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);overflow:hidden;
+  font-family:"Saira Semi Condensed","Arial Narrow",system-ui,sans-serif;-webkit-user-select:none;user-select:none;touch-action:none}
+canvas{display:block;position:fixed;inset:0}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+
+#hud{position:fixed;left:0;right:0;top:env(safe-area-inset-top,0px);padding:14px 18px;display:flex;gap:18px;align-items:flex-start;justify-content:space-between;pointer-events:none;flex-wrap:wrap}
+#hud .left{max-width:420px}
+#lvname{font-weight:800;font-size:22px;letter-spacing:.01em;line-height:1.1}
+#brief{color:var(--mute);font-size:14px;line-height:1.4;margin-top:4px}
+#hud .right{display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:260px;flex:0 1 380px}
+#phase{font-weight:800;font-size:15px;padding:3px 12px;border-radius:2px;border:1.5px solid currentColor}
+#hud[data-phase=inv] #phase{color:var(--blue)}
+#hud[data-phase=nor] #phase{color:var(--red)}
+#hud[data-phase=inv] #phase::before{content:"◀ "}
+#hud[data-phase=nor] #phase::after{content:" ▶"}
+#o2wrap{width:100%;display:flex;align-items:center;gap:10px}
+#o2txt{font-weight:600;font-size:14px;min-width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.bar{flex:1;height:8px;background:#232930;border-radius:1px;overflow:hidden}
+#o2bar{height:100%;background:var(--blue);transition:width .25s linear}
+#o2wrap.low #o2bar{background:var(--red)}
+#o2wrap.low #o2txt{color:var(--red)}
+#tl{width:100%;background:var(--panel);border:1px solid var(--line);padding:8px 10px;border-radius:3px}
+#tlhead{display:flex;justify-content:space-between;font-size:12px;color:var(--mute);margin-bottom:4px}
+#tltxt{font-variant-numeric:tabular-nums;color:var(--ink);font-weight:600}
+#tlbody{position:relative}
+.tlrow{display:flex;align-items:center;gap:8px;height:16px}
+.tlrow .lab{width:128px;font-size:11.5px;color:var(--mute);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tlrow .track{position:relative;flex:1;height:6px;background:#232930}
+.tlrow i{position:absolute;top:0;bottom:0}
+.tlrow.need i{background:var(--red)} .tlrow.help i{background:var(--blue)} .tlrow.win i{background:#e9edf0}
+#tlcurwrap{position:absolute;left:136px;right:0;top:-2px;bottom:-2px;pointer-events:none}
+#tlcur{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#ffcf6a;box-shadow:0 0 6px #ffcf6a}
+
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(24px + env(safe-area-inset-bottom,0px));max-width:min(560px,92vw);
+  background:var(--panel);border-left:3px solid var(--ink);padding:10px 14px;font-size:15px;line-height:1.4;pointer-events:none}
+#toast[data-tone=red]{border-left-color:var(--red)}
+
+#overlay{position:fixed;inset:0;display:grid;place-items:center;background:rgba(8,10,12,.55);padding:16px;overflow:auto}
+#overlay[data-low='1']{place-items:end center;background:rgba(8,10,12,.2)}
+#overlay[data-low='1'] #ocard{max-width:560px;padding:20px 24px}
+#ach{position:fixed;left:50%;top:calc(16px + env(safe-area-inset-top,0px));z-index:20;display:flex;gap:14px;align-items:flex-start;
+  width:min(440px,92vw);padding:14px 18px;background:var(--panel);border:1px solid #ffcf6a;border-radius:4px;box-shadow:0 0 30px rgba(255,207,106,.25);
+  transform:translate(-50%,-140%);opacity:0;transition:transform .45s cubic-bezier(.2,.9,.3,1.2),opacity .3s;pointer-events:none}
+#ach.show{transform:translate(-50%,0);opacity:1}
+#ach[hidden]{display:none}
+.ach-icon{font-size:30px;line-height:1;color:#ffcf6a;background:linear-gradient(90deg,var(--red) 50%,var(--blue) 50%);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.ach-k{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#ffcf6a;font-weight:600}
+.ach-t{font-size:20px;font-weight:800;line-height:1.15;margin-top:2px}
+.ach-d{font-size:13px;color:var(--mute);margin-top:3px;line-height:1.35}
+.ach-q{font-size:14px;margin-top:8px;line-height:1.4;color:#d3d9de}
+.ach-q i{color:var(--ink)}
+@media (prefers-reduced-motion: reduce){#ach{transition:none}}
+#overlay[hidden],#toast[hidden],#hud[hidden],#o2wrap[hidden],#tl[hidden]{display:none}
+#ocard{background:var(--panel);border:1px solid var(--line);max-width:620px;width:100%;padding:26px 28px;border-radius:4px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);max-height:calc(100% - 8px);overflow:auto}
+#ocard h2{margin:0 0 8px;font-size:30px;font-weight:800;line-height:1.1}
+#ocard p{margin:0 0 12px;font-size:16px;line-height:1.5;color:#d3d9de}
+#ocard p.small{font-size:14px;color:var(--mute)}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.btns button,.lvl{background:#262c33;border:1px solid var(--line);padding:9px 18px;border-radius:2px;cursor:pointer;font-weight:600;font-size:16px}
+.btns button.primary{background:var(--ink);color:#12161a;border-color:var(--ink)}
+.btns button:hover,.lvl:hover:not(:disabled){border-color:var(--ink)}
+.title{position:relative;font-weight:800;font-size:clamp(44px,11vw,84px);line-height:.9;letter-spacing:.02em;margin:0 0 14px;height:1em}
+.title span{position:absolute;left:0;top:0}
+.title .fwd{color:var(--red);mix-blend-mode:screen}
+.title .rev{color:var(--blue);transform:scaleX(-1);transform-origin:center;width:100%;text-align:center;left:0;opacity:.55;mix-blend-mode:screen;clip-path:inset(0 0 48% 0)}
+.title .fwd{width:100%;text-align:center;clip-path:inset(46% 0 0 0)}
+.rules{margin:0 0 12px;padding-left:18px;font-size:15px;line-height:1.45;color:#d3d9de}
+.rules li{margin-bottom:5px}
+b.b{color:var(--blue)} b.r{color:var(--red)}
+.levels{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:6px}
+.lvl{display:flex;gap:10px;align-items:baseline;text-align:left}
+.lvl .num{color:var(--mute);font-variant-numeric:tabular-nums}
+.lvl:disabled{opacity:.35;cursor:not-allowed}
+
+.pad{position:fixed;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));width:200px;height:200px;display:none}
+@media (pointer:coarse){ .pad{display:block} #toast{bottom:calc(196px + env(safe-area-inset-bottom,0px))} }
+.pad button{position:absolute;width:62px;height:62px;border-radius:50%;background:rgba(30,35,41,.8);border:1.5px solid var(--line);font-size:22px;touch-action:none}
+.pad button:active{border-color:var(--ink);background:rgba(60,68,78,.9)}
+.pad [data-dir=up]{right:4px;top:4px} .pad [data-dir=right]{right:4px;bottom:4px}
+.pad [data-dir=down]{left:4px;bottom:4px} .pad [data-dir=left]{left:4px;top:4px}
+.pad span{display:inline-block}
+.mute{position:fixed;right:calc(18px + env(safe-area-inset-right,0px));bottom:calc(18px + env(safe-area-inset-bottom,0px));background:rgba(30,35,41,.8);border:1px solid var(--line);color:var(--mute);font-size:12px;padding:5px 10px;border-radius:2px;cursor:pointer}
+@media (pointer:coarse){.mute{left:calc(18px + env(safe-area-inset-left,0px));right:auto}}
+.compass{position:fixed;left:18px;bottom:calc(18px + env(safe-area-inset-bottom,0px));font-size:12px;color:var(--mute);line-height:1.3}
+@media (pointer:coarse){.compass{display:none}}
+@media (max-width:700px){ #hud{padding:10px 12px} #lvname{font-size:18px} #brief{font-size:12.5px} #hud .right{min-width:0;flex:1 1 100%;align-items:stretch} #phase{align-self:flex-start} }
+</style>
+</head>
+<body>
+<canvas id="cv" aria-label="Game view"></canvas>
+<div id="hud" hidden>
+  <div class="left"><div id="lvname"></div><div id="brief"></div></div>
+  <div class="right">
+    <div id="phase"></div>
+    <div id="o2wrap"><div class="bar"><div id="o2bar"></div></div><span id="o2txt"></span></div>
+    <div id="tl" hidden>
+      <div id="tlhead"><span>Timeline</span><span id="tltxt"></span></div>
+      <div id="tlbody"><div id="tlrows"></div><div id="tlcurwrap"><div id="tlcur"></div></div></div>
+    </div>
+  </div>
+</div>
+<div id="toast" hidden></div>
+<div class="compass" id="compass" aria-hidden="true"></div>
+<button id="mute" class="mute" aria-pressed="true">Sound on</button>
+<div class="pad" aria-label="Movement">
+  <button data-dir="up" aria-label="Move up"><span>↑</span></button>
+  <button data-dir="right" aria-label="Move right"><span>↑</span></button>
+  <button data-dir="down" aria-label="Move down"><span>↑</span></button>
+  <button data-dir="left" aria-label="Move left"><span>↑</span></button>
+</div>
+<div id="ach" role="status" aria-live="polite" hidden></div>
+<div id="overlay" hidden><div id="ocard" role="dialog" aria-modal="true"></div></div>
+<script>
+const LEVELS = [
+{
+  name: 'Bridge', o2: 30,
+  brief: 'Hold the blue plate long enough for your future self to cross the acid. Then reach the exit door.',
+  map: [
+    "#######",
+    "##BR###",
+    "#.....#",
+    "#.###.#",
+    "#.###=#",
+    "#p###=#",
+    "#.###=#",
+    "#.###.#",
+    "#.....#",
+    "#D#S###"],
+  legend: { p: { t: 'plate', c: 'b', id: 1 }, '=': { t: 'bridge', id: 1 } }
+},
+{
+  name: 'Two doors', o2: 34,
+  brief: 'Red things are your normal self’s job. You may walk through the red door now, but later you must hold its plate at exactly that moment.',
+  map: [
+    "#########",
+    "###BR####",
+    "##.....##",
+    "##.###.##",
+    "##d###p##",
+    "##.###.##",
+    "##q###e##",
+    "##.###.##",
+    "##.###.##",
+    "##D###S##"],
+  legend: { d: { t: 'door', id: 1 }, p: { t: 'plate', c: 'r', id: 1 }, q: { t: 'plate', c: 'b', id: 2 }, e: { t: 'door', id: 2 } }
+},
+{
+  name: 'Beams', o2: 34,
+  brief: 'Stand next to a console to switch its laser off. Blue consoles are yours; red ones belong to your normal self.',
+  map: [
+    "#########",
+    "###BR####",
+    "##.....##",
+    "##.###.##",
+    "##L##C.##",
+    "##.###.##",
+    "##.c##M##",
+    "##.###.##",
+    "##.###.##",
+    "##D###S##"],
+  legend: { L: { t: 'laser', id: 1, o: 'h' }, C: { t: 'console', c: 'r', id: 1 }, c: { t: 'console', c: 'b', id: 2 }, M: { t: 'laser', id: 2, o: 'h' } }
+}
+];
+LEVELS.push({
+  name: 'Overwatch', o2: 36,
+  brief: 'The turret can’t fire while your inverted self walks right beside it. Use that to protect your normal self on the red plate. Waiting at the turnstile before you set off gives your normal self more time to step in.',
+  map: [
+    "#########",
+    "###BR####",
+    "##.....##",
+    "##.###.##",
+    "##=###.##",
+    "##=X..p##",
+    "##=###.##",
+    "##.###.##",
+    "##.###.##",
+    "##D###S##"],
+  legend: { '=': { t: 'bridge', id: 1 }, p: { t: 'plate', c: 'r', id: 1 }, X: { t: 'turret', c: 'b', r: 3.2 } }
+});
+LEVELS.push({
+  name: 'Pincer', o2: 44,
+  brief: 'Everything at once. Your normal self has to hack the red turret, cross your bridge and reach the red console, each at exactly the right moment.',
+  map: [
+    "#########",
+    "###BR####",
+    "##.....##",
+    "##.###.##",
+    "##L##K.##",
+    "##.###.##",
+    "##.###=##",
+    "##q###=##",
+    "##.###=##",
+    "##.###.##",
+    "##.Y...##",
+    "##.###.##",
+    "##.###.##",
+    "##D###S##"],
+  legend: { L: { t: 'laser', id: 1, o: 'h' }, K: { t: 'console', c: 'r', id: 1 }, q: { t: 'plate', c: 'b', id: 2 }, '=': { t: 'bridge', id: 2 }, Y: { t: 'turret', c: 'r', r: 1.5 } }
+});
+LEVELS.push({
+  name: 'Lockstep', o2: 24,
+  brief: 'Two parallel corridors. Walk past your blue console while your normal self needs the laser down, and be next to the red console when your inverted self steps through the red laser.',
+  map: [
+    "#############",
+    "#B..L......D#",
+    "#R##K###c####",
+    "#.......M..S#",
+    "#############"],
+  legend: { L: { t: 'laser', id: 1, o: 'v' }, K: { t: 'console', c: 'r', id: 1 }, c: { t: 'console', c: 'b', id: 2 }, M: { t: 'laser', id: 2, o: 'v' } }
+});
+LEVELS.push({
+  name: 'Relay', o2: 36,
+  brief: 'A chain of favours, alternating between you. Work out the order your normal self will meet them in.',
+  map: [
+    "#########",
+    "###BR####",
+    "##.....##",
+    "##=###.##",
+    "##=###.##",
+    "##.###P##",
+    "##q###.##",
+    "##.###.##",
+    "##.###e##",
+    "##d###.##",
+    "##.###r##",
+    "##.###.##",
+    "##.###.##",
+    "##D###S##"],
+  legend: { '=': { t: 'bridge', id: 1 }, P: { t: 'plate', c: 'r', id: 1 }, q: { t: 'plate', c: 'b', id: 2 }, e: { t: 'door', id: 2 }, d: { t: 'door', id: 3 }, r: { t: 'plate', c: 'r', id: 3 } }
+});
+LEVELS.push({
+  name: 'Mirror', o2: 32,
+  brief: 'Your plate raises the bridge, but the red turret is watching you on it. Your normal self can only keep it hacked while crossing that same bridge.',
+  map: [
+    "#########",
+    "###BR####",
+    "##.....##",
+    "##.###.##",
+    "##.###.##",
+    "##.###=##",
+    "##q..Y=##",
+    "##.###=##",
+    "##.###.##",
+    "##D###.##",
+    "#####...#",
+    "#####.#.#",
+    "#####S#.#",
+    "#####...#",
+    "#########"],
+  legend: { '=': { t: 'bridge', id: 1 }, q: { t: 'plate', c: 'b', id: 1 }, Y: { t: 'turret', c: 'r', r: 3.5 } }
+});
+LEVELS.push({
+  name: 'Sentries', o2: 36,
+  brief: 'Two turrets, one of each colour. Each of you can only stand still under fire while the other one is walking past the gun.',
+  map: [
+    "#########",
+    "###BR####",
+    "##.....##",
+    "##.###.##",
+    "##.###.##",
+    "##.###=##",
+    "##q..Y=##",
+    "##.###=##",
+    "##.###.##",
+    "##.###.##",
+    "##%###.##",
+    "##%X..p##",
+    "##%###.##",
+    "##.###.##",
+    "##D###S##"],
+  legend: { '=': { t: 'bridge', id: 1 }, q: { t: 'plate', c: 'b', id: 1 }, Y: { t: 'turret', c: 'r', r: 3.5 },
+            '%': { t: 'bridge', id: 2 }, p: { t: 'plate', c: 'r', id: 2 }, X: { t: 'turret', c: 'b', r: 3.2 } }
+});
+LEVELS.push({
+  name: 'Palindrome', o2: 42,
+  brief: 'The whole route reads the same in both directions. Every favour you do going down is one you collect coming up.',
+  map: [
+    "#########",
+    "###BR####",
+    "##.....##",
+    "##.###.##",
+    "##L##K.##",
+    "##.###.##",
+    "##q###.##",
+    "##.###.##",
+    "##.###e##",
+    "##.###.##",
+    "##..Y..##",
+    "##.###.##",
+    "##.c##M##",
+    "##.###.##",
+    "##%###.##",
+    "##%X..p##",
+    "##%###.##",
+    "##.###.##",
+    "##D###S##"],
+  legend: { L: { t: 'laser', id: 1, o: 'h' }, K: { t: 'console', c: 'r', id: 1 }, q: { t: 'plate', c: 'b', id: 2 }, e: { t: 'door', id: 2 },
+            Y: { t: 'turret', c: 'r', r: 2.3 }, c: { t: 'console', c: 'b', id: 3 }, M: { t: 'laser', id: 3, o: 'h' },
+            '%': { t: 'bridge', id: 4 }, p: { t: 'plate', c: 'r', id: 4 }, X: { t: 'turret', c: 'b', r: 3.2 } }
+});
+LEVELS.push({
+  name: 'Switchboard', o2: 40,
+  brief: 'Three plates, three doors. Follow the cables: your normal self meets the doors from the bottom up, so in your run they have to happen in the opposite order.',
+  map: [
+    "###########",
+    "###BR######",
+    "###......##",
+    "#....q##.##",
+    "#p....##c##",
+    "#.....##.##",
+    "#.....##.##",
+    "#.....##b##",
+    "#.....##.##",
+    "#r....##.##",
+    "###.####a##",
+    "###D####.##",
+    "########S##"],
+  legend: { r: { t: 'plate', c: 'b', id: 3 }, q: { t: 'plate', c: 'b', id: 2 }, p: { t: 'plate', c: 'b', id: 1 },
+            c: { t: 'door', id: 3 }, b: { t: 'door', id: 2 }, a: { t: 'door', id: 1 } }
+});
+LEVELS.push({
+  name: 'Crossed wires', o2: 36,
+  brief: 'Two consoles and a plate, all wired to your normal self’s corridor. Trace each cable, then work them in the order that lets your normal self through. The red door on your way out is your normal self’s first job.',
+  map: [
+    "###########",
+    "###BR######",
+    "###......##",
+    "#....K##.##",
+    "#.....##L##",
+    "#.....##.##",
+    "#p....##M##",
+    "#.....##.##",
+    "#.k...##.##",
+    "#.....##=##",
+    "###d####=##",
+    "###.####.##",
+    "###D####r##",
+    "########S##"],
+  legend: { K: { t: 'console', c: 'b', id: 2 }, M: { t: 'laser', id: 2, o: 'h' }, k: { t: 'console', c: 'b', id: 3 }, L: { t: 'laser', id: 3, o: 'h' },
+            p: { t: 'plate', c: 'b', id: 4 }, '=': { t: 'bridge', id: 4 }, d: { t: 'door', id: 5 }, r: { t: 'plate', c: 'r', id: 5 } }
+});
+LEVELS.push({
+  name: 'Junction box', o2: 50,
+  brief: 'Four controls, four obstacles. Read every cable before you leave the turnstile.',
+  map: [
+    "#############",
+    "####BR#######",
+    "####.......##",
+    "#...#...##.##",
+    "#......K##L##",
+    "#.......##.##",
+    "#.......##.##",
+    "#p......##=##",
+    "#.......##=##",
+    "#.......##.##",
+    "#.......##M##",
+    "#.....k.##.##",
+    "#.q.....##.##",
+    "####d#####a##",
+    "####D#####r##",
+    "##########S##"],
+  legend: { K: { t: 'console', c: 'b', id: 2 }, M: { t: 'laser', id: 2, o: 'h' },
+            k: { t: 'console', c: 'b', id: 4 }, L: { t: 'laser', id: 4, o: 'h' },
+            p: { t: 'plate', c: 'b', id: 3 }, '=': { t: 'bridge', id: 3 },
+            q: { t: 'plate', c: 'b', id: 1 }, a: { t: 'door', id: 1 },
+            d: { t: 'door', id: 5 }, r: { t: 'plate', c: 'r', id: 5 } }
+});
+LEVELS.push({
+  name: 'Two rooms', o2: 52,
+  brief: 'Two rooms of controls, and a red turret watching the passage between them. Your normal self has to hack it while you walk through.',
+  map: [
+    "#############",
+    "####BR#######",
+    "####.......##",
+    "#...#..K##L##",
+    "#.......##.##",
+    "#.......##=##",
+    "#.k.....##=##",
+    "####.#####.##",
+    "####.....Y.##",
+    "####.#####.##",
+    "#.p.....##.##",
+    "#.......##M##",
+    "#.......##.##",
+    "#......o##a##",
+    "####.#####.##",
+    "####D#####S##"],
+  legend: { K: { t: 'console', c: 'b', id: 1 }, '=': { t: 'bridge', id: 1 },
+            k: { t: 'console', c: 'b', id: 2 }, L: { t: 'laser', id: 2, o: 'h' },
+            Y: { t: 'turret', c: 'r', r: 5.5 },
+            o: { t: 'plate', c: 'b', id: 3 }, M: { t: 'laser', id: 3, o: 'h' },
+            p: { t: 'plate', c: 'b', id: 4 }, a: { t: 'door', id: 4 } }
+});
+LEVELS.push({
+  name: 'Patch bay', o2: 56,
+  brief: 'The control room runs along the top, your normal self’s corridor along the bottom. The cables drop straight down, just never to where you’d expect.',
+  map: [
+    "###############",
+    "##.c........K##",
+    "#B...........##",
+    "#R#..........e#",
+    "#.#.a.....k.#D#",
+    "#.#############",
+    "#..L.==.M..ArS#",
+    "###############"],
+  legend: { K: { t: 'console', c: 'b', id: 1 }, L: { t: 'laser', id: 1, o: 'v' },
+            c: { t: 'plate', c: 'b', id: 2 }, '=': { t: 'bridge', id: 2 },
+            k: { t: 'console', c: 'b', id: 3 }, M: { t: 'laser', id: 3, o: 'v' },
+            a: { t: 'plate', c: 'b', id: 4 }, A: { t: 'door', id: 4 },
+            e: { t: 'door', id: 5 }, r: { t: 'plate', c: 'r', id: 5 } }
+});
+LEVELS.push({
+  name: 'Passing place', o2: 40,
+  brief: 'One corridor, two of you. You can never touch your other self, so somewhere along the way one of you has to step aside.',
+  map: [
+    "##########",
+    "##.BR#####",
+    "##.#...###",
+    "##.###e###",
+    "##.###.###",
+    "##.....###",
+    "####.#####",
+    "####.#####",
+    "####....D#",
+    "####.#####",
+    "###..#####",
+    "####.#####",
+    "####p#####",
+    "####S#####"],
+  legend: { p: { t: 'plate', c: 'b', id: 1 }, e: { t: 'door', id: 1 } }
+});
+LEVELS.push({
+  name: 'Shuttle', o2: 54,
+  brief: 'This time you have to go down the corridor, back up, and down again. Your normal self meets you coming the other way at least once.',
+  map: [
+    "##########",
+    "##.BR#####",
+    "##q#...###",
+    "##.###e###",
+    "##.###.###",
+    "##.....###",
+    "####.#####",
+    "####..####",
+    "####.#####",
+    "####.#####",
+    "###..#####",
+    "####.#####",
+    "####p#####",
+    "##D..f.S##"],
+  legend: { p: { t: 'plate', c: 'b', id: 1 }, e: { t: 'door', id: 1 }, q: { t: 'plate', c: 'b', id: 2 }, f: { t: 'door', id: 2 } }
+});
+LEVELS.push({
+  name: 'Blind spot', o2: 40,
+  brief: 'The only place to step aside is in the turret’s sight. It only stops shooting while your inverted self brushes past it.',
+  map: [
+    "##########",
+    "##.BR#####",
+    "##.#...###",
+    "##.###e###",
+    "##.###.###",
+    "##.....###",
+    "####.#####",
+    "####.#####",
+    "####....D#",
+    "####.#####",
+    "###..X####",
+    "####.#####",
+    "####p#####",
+    "####S#####"],
+  legend: { p: { t: 'plate', c: 'b', id: 1 }, e: { t: 'door', id: 1 }, X: { t: 'turret', c: 'b', r: 2.1 } }
+});
+LEVELS.push({
+  name: 'Rendezvous', o2: 68,
+  brief: 'Two rooms of controls, a watched passage, and one narrow corridor you both need. Read the cables, and leave your normal self room to get past you.',
+  map: [
+    "#############",
+    "####BR#######",
+    "####.......##",
+    "#...#..K##L##",
+    "#.......##.##",
+    "#.......##=##",
+    "#.k.....##=##",
+    "####.#####.##",
+    "####.....Y.##",
+    "####.#####.##",
+    "#.p.....##.##",
+    "#.......##M##",
+    "#.......##.##",
+    "#......o##a##",
+    "####g#####.##",
+    "####...A.r.##",
+    "##D..########",
+    "####.########",
+    "###..########",
+    "####q########",
+    "####S########"],
+  legend: { K: { t: 'console', c: 'b', id: 1 }, '=': { t: 'bridge', id: 1 },
+            k: { t: 'console', c: 'b', id: 2 }, L: { t: 'laser', id: 2, o: 'h' },
+            Y: { t: 'turret', c: 'r', r: 5.5 },
+            o: { t: 'plate', c: 'b', id: 3 }, M: { t: 'laser', id: 3, o: 'h' },
+            p: { t: 'plate', c: 'b', id: 4 }, a: { t: 'door', id: 4 },
+            q: { t: 'plate', c: 'b', id: 5 }, A: { t: 'door', id: 5 },
+            g: { t: 'door', id: 6 }, r: { t: 'plate', c: 'r', id: 6 } }
+});
+LEVELS.push({
+  name: 'Hypocenter', o2: 38,
+  brief: 'In normal time the whole building comes down around you, room by room, starting with the vault you begin in. Your inverted self starts in the rubble and watches it rebuild. Only the turnstile platform survives.',
+  map: [
+    "##############",
+    "#######BR#####",
+    "####.f....j..#",
+    "#####.######.#",
+    "###....c.###.#",
+    "#........###.#",
+    "#.#.......==.#",
+    "#r#......#####",
+    "#.###.########",
+    "#d###g########",
+    "#.....########",
+    "#..q..########",
+    "#S...D########",
+    "##############"],
+  fall: [
+    "              ",
+    "              ",
+    "              ",
+    "     e      e ",
+    "   hhhi i   e ",
+    " vvhhhiii   e ",
+    " v hhhiiie  e ",
+    "   hhhiii     ",
+    " w   p        ",
+    "              ",
+    " xxxxx        ",
+    " xx xx        ",
+    "  xxx         ",
+    "              "],
+  fallK: { x: 23, w: 18, v: 14, p: 21, h: 8, i: 6, e: 3 },
+  legend: { c: { t: 'console', c: 'b', id: 1 }, '=': { t: 'bridge', id: 1 },
+            q: { t: 'plate', c: 'b', id: 2 }, d: { t: 'door', id: 2 },
+            g: { t: 'door', id: 3 }, r: { t: 'plate', c: 'r', id: 3 },
+            f: { t: 'door', id: 4 }, j: { t: 'plate', c: 'r', id: 4 } }
+});
+
+// ===== CORE (pure logic, no rendering) =====
+const LAG = 2;
+const DIRV = { up: [0, -1], right: [1, 0], down: [0, 1], left: [-1, 0] };
+
+function parseLevel(def) {
+  const H = def.map.length, W = Math.max(...def.map.map(r => r.length));
+  const L = { def, W, H, tiles: [], ctrl: {}, turrets: [], plates: [], consoles: [], devs: [], B: null, R: null, D: null, S: null };
+  for (let y = 0; y < H; y++) {
+    const row = [];
+    for (let x = 0; x < W; x++) {
+      const ch = def.map[y][x] || ' ';
+      let t = { base: 'floor', dev: null };
+      if (ch === '#') t.base = 'wall';
+      else if (ch === ' ') t.base = 'void';
+      else if (ch === '~') t.base = 'acid';
+      else if (ch === 'B') { t.special = 'B'; L.B = [x, y]; }
+      else if (ch === 'R') { t.special = 'R'; L.R = [x, y]; }
+      else if (ch === 'D') { t.special = 'D'; L.D = [x, y]; }
+      else if (ch === 'S') { t.special = 'S'; L.S = [x, y]; }
+      else if (ch !== '.') {
+        const spec = def.legend[ch];
+        if (!spec) throw new Error('Unknown char ' + ch);
+        const d = Object.assign({ x, y }, spec);
+        t.dev = d;
+        if (spec.t === 'bridge') t.base = 'acid';
+        if (spec.t === 'console' || spec.t === 'turret') t.base = 'solid';
+        if (spec.t === 'plate' || spec.t === 'console') L.ctrl[spec.id] = d;
+        if (spec.t === 'plate') L.plates.push(d);
+        if (spec.t === 'console') L.consoles.push(d);
+        if (spec.t === 'turret') L.turrets.push(d);
+        L.devs.push(d);
+      }
+      row.push(t);
+    }
+    L.tiles.push(row);
+  }
+  // collapsing floor: whole rows of plain floor give way k steps before the pincer closes
+  L.crumbles = [];
+  for (const [y, k] of (def.collapse || [])) for (let x = 0; x < W; x++) {
+    const t = L.tiles[y][x]; if (t.base === 'floor' && !t.dev && !t.special) { t.crumble = k; L.crumbles.push({ x, y, k }); }
+  }
+  // or a second map: a letter per tile names its zone, def.fallK gives that zone's k
+  if (def.fall) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const ch = (def.fall[y] || '')[x], k = ch && def.fallK[ch];
+    const t = L.tiles[y][x]; if (k != null && t.base === 'floor' && !t.dev && !t.special) { t.crumble = k; L.crumbles.push({ x, y, k }); }
+  }
+  return L;
+}
+
+const eq = (a, b) => a && b && a[0] === b[0] && a[1] === b[1];
+const cheb = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]));
+function tileAt(L, x, y) { return (y >= 0 && y < L.H && x >= 0 && x < L.W) ? L.tiles[y][x] : { base: 'void' }; }
+function blocksSight(L, x, y) { const b = tileAt(L, x, y).base; return b === 'wall' || b === 'solid' || b === 'void'; }
+
+// Is controller `id` engaged? pos = {inv, nor}; returns true / false / 'spec' (speculative: future-normal will do it)
+function ctrlState(L, id, pos, phase) {
+  const c = L.ctrl[id];
+  if (!c) return false;
+  if (phase === 'inv' && c.c === 'r') return 'spec';
+  const p = c.c === 'b' ? pos.inv : pos.nor;
+  if (!p) return false;
+  if (c.t === 'plate') return p[0] === c.x && p[1] === c.y;
+  return cheb(p, [c.x, c.y]) === 1;
+}
+function turretHacked(L, tu, pos, phase) {
+  if (phase === 'inv' && tu.c === 'r') return 'spec';
+  const p = tu.c === 'b' ? pos.inv : pos.nor;
+  return !!p && cheb(p, [tu.x, tu.y]) === 1;
+}
+function canSee(L, tu, p) {
+  const dx = p[0] - tu.x, dy = p[1] - tu.y;
+  if (dx * dx + dy * dy > tu.r * tu.r + 0.01) return false;
+  const n = Math.max(Math.abs(dx), Math.abs(dy)) * 4;
+  for (let i = 1; i < n; i++) {
+    const fx = tu.x + dx * i / n, fy = tu.y + dy * i / n;
+    const cx = Math.round(fx), cy = Math.round(fy);
+    if ((cx === tu.x && cy === tu.y) || (cx === p[0] && cy === p[1])) continue;
+    if (blocksSight(L, cx, cy)) return false;
+  }
+  return true;
+}
+// Is a tile safe to stand on given device states?  returns null if fine else hazard name
+function hazard(L, p, pos, phase) {
+  const t = tileAt(L, p[0], p[1]);
+  const d = t.dev;
+  if (!d) return t.base === 'acid' ? 'acid' : null;
+  if (d.t === 'bridge') return ctrlState(L, d.id, pos, phase) ? null : 'acid';
+  if (d.t === 'door') return ctrlState(L, d.id, pos, phase) ? null : 'door';
+  if (d.t === 'laser') return ctrlState(L, d.id, pos, phase) ? null : 'laser';
+  return null;
+}
+function passable(L, p, who, pos, phase, ghostOnB) {
+  const t = tileAt(L, p[0], p[1]);
+  if (t.base === 'wall' || t.base === 'void' || t.base === 'solid') return false;
+  if (t.special === 'R' && (who !== 'nor' || !ghostOnB)) return false;
+  if (t.special === 'B' && who !== 'inv') return false;
+  if (t.special === 'D' && who !== 'inv') return false;
+  return hazard(L, p, pos, phase) === null;
+}
+
+// ---- leniency ----
+const LINGER = 1;   // devices stay on this many ticks after being released
+const GRACE = 1;    // a red job may be done this many ticks late
+const WINDOW = 0;   // turnstile: both selves must step in at the same moment
+
+// position of each self at tick t of a run
+function posAt(run, t) {
+  if (run.phase === 'inv') return { inv: run.rec[Math.max(0, Math.min(run.rec.length - 1, t))] };
+  return { inv: ghostAt(run, t), nor: run.hist[Math.max(0, Math.min(run.hist.length - 1, t))] };
+}
+function curT(run) { return run.phase === 'inv' ? run.i : run.t; }
+// controller state with linger: true / false / 'spec'
+function actAt(L, run, id, t) {
+  const s0 = ctrlState(L, id, posAt(run, t), run.phase);
+  if (s0) return s0;
+  for (let k = 1; k <= LINGER && t - k >= 0; k++) if (ctrlState(L, id, posAt(run, t - k), run.phase) === true) return true;
+  return false;
+}
+function hackAt(L, run, tu, t) {
+  const h0 = turretHacked(L, tu, posAt(run, t), run.phase);
+  if (h0) return h0;
+  for (let k = 1; k <= LINGER && t - k >= 0; k++) if (turretHacked(L, tu, posAt(run, t - k), run.phase) === true) return true;
+  return false;
+}
+// a collapsing tile exists for the inverted self only after step k, and for the normal self only until T - k
+function goneAt(L, run, tl, t) {
+  if (tl.crumble == null) return false;
+  return run.phase === 'inv' ? t <= tl.crumble : t >= run.T - tl.crumble;
+}
+function hazardAt(L, run, p, t) {
+  const tl = tileAt(L, p[0], p[1]), d = tl.dev;
+  if (goneAt(L, run, tl, t)) return 'fall';
+  if (!d) return tl.base === 'acid' ? 'acid' : null;
+  const map = { bridge: 'acid', door: 'door', laser: 'laser' };
+  if (!map[d.t]) return null;
+  return actAt(L, run, d.id, t) ? null : map[d.t];
+}
+function canEnter(L, run, p, who, t) {
+  const tl = tileAt(L, p[0], p[1]);
+  if (tl.base === 'wall' || tl.base === 'void' || tl.base === 'solid') return false;
+  if (tl.special === 'B' && who !== 'inv') return false;
+  if (tl.special === 'D' && who !== 'inv') return false;
+  if (tl.special === 'R') { if (who !== 'nor') return false; return turnstileOpen(L, run, t); }
+  return hazardAt(L, run, p, t) === null;
+}
+function turnstileOpen(L, run, t) { for (let k = -WINDOW; k <= WINDOW; k++) if (t + k >= 0 && eq(ghostAt(run, t + k), L.B)) return true; return false; }
+
+// ---- Inverted phase ----
+function newInv(L) {
+  return { phase: 'inv', i: 0, pos: L.B.slice(), rec: [L.B.slice()], shots: [], over: null, events: [] };
+}
+function stepInv(L, s, dir) {
+  if (s.over) return;
+  const i = ++s.i; s.events = [];
+  let np = s.pos;
+  if (dir) {
+    const c = [s.pos[0] + DIRV[dir][0], s.pos[1] + DIRV[dir][1]];
+    s.rec[i] = c;
+    if (canEnter(L, s, c, 'inv', i)) np = c; else s.events.push('bump');
+  }
+  s.pos = np; s.rec[i] = np.slice();
+  const hz = hazardAt(L, s, np, i);
+  if (hz) { s.over = { lose: true, why: hz }; return; }
+  for (const sh of s.shots) if (sh.land === i && eq(sh.at, np)) { s.over = { lose: true, why: 'shot', shot: sh }; s.events.push('hit'); return; }
+  L.turrets.forEach((tu, k) => {
+    if (hackAt(L, s, tu, i)) return;
+    if (canSee(L, tu, np)) { s.shots.push({ tur: k, fire: i, land: i + LAG, at: np.slice() }); s.events.push('fire'); }
+  });
+  if (eq(np, L.D)) { s.over = { win: true }; return; }
+  if (i >= L.def.o2) { s.over = { lose: true, why: 'o2' }; }
+}
+
+// ---- Normal phase ----
+function newNor(L, inv) {
+  const T = inv.rec.length - 1;
+  return { phase: 'nor', t: 0, T, rec: inv.rec, invShots: inv.shots, pos: L.S.slice(), prev: L.S.slice(), hist: [L.S.slice()], shots: [], pending: [], inGate: false, over: null, events: [] };
+}
+const ghostAt = (s, t) => s.rec[Math.max(0, Math.min(s.T, s.T - t))];
+function redJobDone(L, s, job, t) {
+  return job.tur ? turretHacked(L, job.tur, posAt(s, t), 'nor') === true : ctrlState(L, job.id, posAt(s, t), 'nor') === true;
+}
+function stepNor(L, s, dir) {
+  if (s.over) return;
+  const t = ++s.t; s.events = [];
+  const g = ghostAt(s, t), gPrev = ghostAt(s, t - 1);
+  let np = s.pos;
+  if (dir && !s.inGate) {
+    const c = [s.pos[0] + DIRV[dir][0], s.pos[1] + DIRV[dir][1]];
+    s.hist[t] = c;
+    if (canEnter(L, s, c, 'nor', t)) np = c; else s.events.push('bump');
+  }
+  s.prev = s.pos; s.pos = np; s.hist[t] = np.slice();
+  if (eq(np, L.R)) s.inGate = true;
+  if (eq(np, g) || (eq(np, gPrev) && eq(s.prev, g))) { s.over = { lose: true, why: 'annihilation' }; return; }
+  let hz = hazardAt(L, s, np, t);
+  if (hz === 'fall' && !goneAt(L, s, tileAt(L, np[0], np[1]), t - 1)) hz = null; // hidden grace
+  if (hz) { s.over = { lose: true, why: hz }; return; }
+  // red jobs left over from last tick get one tick of grace
+  const still = [];
+  for (const job of s.pending) {
+    if (redJobDone(L, s, job, t)) continue;
+    if (t - job.t >= GRACE) { s.over = { lose: true, why: 'paradox', what: job.what, at: job.at, tur: job.tur }; return; }
+    still.push(job);
+  }
+  s.pending = still;
+  const gt = tileAt(L, g[0], g[1]).dev;
+  if (gt && L.ctrl[gt.id] && L.ctrl[gt.id].c === 'r' && (gt.t === 'bridge' || gt.t === 'door' || gt.t === 'laser') && !actAt(L, s, gt.id, t))
+    s.pending.push({ t, id: gt.id, what: { bridge: 'acid', door: 'door', laser: 'laser' }[gt.t], at: g.slice() });
+  for (const tu of L.turrets) if (tu.c === 'r' && canSee(L, tu, g) && !hackAt(L, s, tu, t)) s.pending.push({ t, tur: tu, what: 'turret', at: g.slice() });
+  if (!s.inGate) {
+    for (const sh of s.shots) if (sh.land === t && eq(sh.at, np)) { s.over = { lose: true, why: 'shot', shot: sh }; s.events.push('hit'); return; }
+    L.turrets.forEach((tu, k) => {
+      if (hackAt(L, s, tu, t)) return;
+      if (canSee(L, tu, np)) { s.shots.push({ tur: k, fire: t, land: t + LAG, at: np.slice() }); s.events.push('fire'); }
+    });
+  }
+  if (s.inGate && eq(g, L.B)) { s.over = { win: true }; return; }
+  if (t >= s.T + WINDOW) s.over = { lose: true, why: 'late' };
+}
+
+// Where (global time) does the ghost rely on red devices?  -> list of {dev, t}
+function redNeeds(L, s) {
+  const out = [];
+  for (let t = 0; t <= s.T; t++) {
+    const g = ghostAt(s, t);
+    const d = tileAt(L, g[0], g[1]).dev;
+    if (d && (d.t === 'bridge' || d.t === 'door' || d.t === 'laser') && L.ctrl[d.id] && L.ctrl[d.id].c === 'r') out.push({ ctrl: L.ctrl[d.id], t });
+    for (const tu of L.turrets) if (tu.c === 'r' && canSee(L, tu, g)) out.push({ ctrl: tu, t });
+  }
+  return out;
+}
+
+// ===== GAME / RENDER =====
+const TICK = 300;
+LEVELS.forEach(l => { l.o2 += 3; }); // a little extra air everywhere
+const COL = { blue: '#46b0ff', red: '#ff5a48', acid: '#b6e03c', ink: '#e9edf0' };
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+let DPR = 1, VW = 0, VH = 0, TW = 64, OX = 0, OY = 0;
+
+const G = { li: 0, L: null, mode: 'title', s: null, n: null, running: false, lastTick: 0, held: [], queued: null,
+  prev: {}, cur: {}, shake: 0, zones: [], disp: {}, dispMoving: {}, walk: { me: 0, ghost: 0 }, lastMoved: false, cables: [], queue: [], lastTickDir: null, bump: null, face: { me: 'down', ghost: 'up' }, anim: {}, parts: [], flash: 0, over: null, needs: [], coverage: [], dead: false };
+
+let unlocked = 1;
+try { unlocked = Math.max(1, parseInt(localStorage.getItem('turnstile.unlocked') || '1', 10) || 1); } catch (e) {}
+function saveUnlock(n) { unlocked = Math.max(unlocked, n); try { localStorage.setItem('turnstile.unlocked', String(unlocked)); } catch (e) {} }
+
+// ---------- layout ----------
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2); VW = innerWidth; VH = innerHeight;
+  cv.width = VW * DPR; cv.height = VH * DPR; cv.style.width = VW + 'px'; cv.style.height = VH + 'px';
+  layout();
+}
+function layout() {
+  const L = G.L; if (!L) return;
+  const top = VW < 700 ? 150 : 120, bot = matchMedia('(pointer: coarse)').matches ? 190 : 70;
+  // fit the projected level (TW = 1) into the screen
+  let minSX = 1e9, maxSX = -1e9, minSY = 1e9, maxSY = -1e9;
+  for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) for (const [u, v] of [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]]) {
+    const sx = ((x + u) * CA - (y + v) * SA) / Math.SQRT2, sy = ((x + u) * SA + (y + v) * CA) / (2 * Math.SQRT2);
+    minSX = Math.min(minSX, sx); maxSX = Math.max(maxSX, sx); minSY = Math.min(minSY, sy); maxSY = Math.max(maxSY, sy);
+  }
+  minSY -= 1.1; maxSY += 0.15; minSX -= 0.2; maxSX += 0.2;
+  const aw = VW - 24, ah = Math.max(200, VH - top - bot);
+  TW = Math.min(aw / (maxSX - minSX), ah / (maxSY - minSY), 92);
+  OX = VW / 2 - (minSX + maxSX) / 2 * TW;
+  OY = top + (ah - (maxSY - minSY) * TW) / 2 - minSY * TW;
+}
+addEventListener('resize', resize);
+// camera yaw: 45° is classic isometric; a smaller angle turns the level counter-clockwise
+// so that "up" points more up the screen and "right" more to the right
+const YAW = 27 * Math.PI / 180, CA = Math.cos(YAW), SA = Math.sin(YAW);
+const P = (x, y) => [OX + (x * CA - y * SA) * TW / Math.SQRT2, OY + (x * SA + y * CA) * TW / (2 * Math.SQRT2)];
+const dep = (x, y) => (x * SA + y * CA) / SA; // draw order (one step in +x = 1)
+
+// ---------- level flow ----------
+function loadLevel(i) {
+  G.li = i; G.L = parseLevel(LEVELS[i]); layout();
+  G.coverage = G.L.turrets.map(tu => { const c = []; for (let y = 0; y < G.L.H; y++) for (let x = 0; x < G.L.W; x++) { const t = G.L.tiles[y][x]; if (t.base !== 'wall' && t.base !== 'void' && t.base !== 'solid' && !(x === tu.x && y === tu.y) && canSee(G.L, tu, [x, y])) c.push([x, y]); } return c; });
+  G.anim = {}; G.cables = buildCables(G.L);
+  // tiles you can stand on to work a console or hack a turret
+  G.zones = [];
+  for (const d of [...G.L.consoles, ...G.L.turrets]) for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+    if (!dx && !dy) continue; const x = d.x + dx, y = d.y + dy, t = tileAt(G.L, x, y);
+    if (t.base === 'floor' || (t.base === 'acid' && t.dev && t.dev.t === 'bridge')) G.zones.push({ x, y, d, c: d.c });
+  }
+  startInv();
+}
+function startInv() {
+  G.mode = 'inv'; G.s = newInv(G.L); G.n = null; G.devPrev = null; G.running = false; G.queue = []; G.lastTickDir = null; G.over = null; G.dead = false; G.death = null;
+  G.prev = { me: G.L.B.slice() }; G.cur = { me: G.L.B.slice() }; G.disp = {}; G.lastMoved = false; G.face.me = 'down';
+  hideOverlay(); hud(); toast('Press a direction to leave the turnstile. Your oxygen starts draining with the first step.');
+}
+function startNor() {
+  G.mode = 'nor'; G.n = newNor(G.L, G.s); G.devPrev = null; G.usedBridge = false; G.running = false; G.queue = []; G.lastTickDir = null; G.over = null; G.dead = false; G.death = null;
+  G.prev = { me: G.L.S.slice(), ghost: ghostAt(G.n, 0) }; G.cur = { me: G.L.S.slice(), ghost: ghostAt(G.n, 0) }; G.disp = {}; G.lastMoved = false;
+  G.face.me = 'up'; G.face.ghost = faceOf(ghostAt(G.n, 0), ghostAt(G.n, -1)) || 'down';
+  G.needs = redNeeds(G.L, G.n);
+  hideOverlay(); hud(); buildTimeline();
+  toast('Normal time. Your inverted run now plays backwards. Press a direction to start.');
+}
+function faceOf(a, b) { // direction from a to b
+  if (!a || !b) return null; const dx = b[0] - a[0], dy = b[1] - a[1];
+  if (dx === 1) return 'right'; if (dx === -1) return 'left'; if (dy === 1) return 'down'; if (dy === -1) return 'up'; return null;
+}
+
+// ---------- ticking ----------
+function tick() {
+  const dir = G.queue.shift() || G.held[G.held.length - 1] || null;
+  G.lastTickDir = dir;
+  if (G.mode === 'inv') {
+    const s = G.s; G.prev = { me: s.pos.slice() };
+    stepInv(G.L, s, dir);
+    if (s.events.includes('bump')) { G.bump = { dir, t0: performance.now() }; G.face.me = dir; }
+    G.cur = { me: s.pos.slice() }; G.lastMoved = !eq(G.prev.me, G.cur.me);
+    if (G.lastMoved) footsteps(G.cur.me, 'inv', false);
+    G.face.me = faceOf(G.prev.me, G.cur.me) || G.face.me;
+    const d = tileAt(G.L, s.pos[0], s.pos[1]).dev;
+    if (d && G.L.ctrl[d.id] && G.L.ctrl[d.id].c === 'r' && (d.t === 'bridge' || d.t === 'door' || d.t === 'laser')) toast('You’re relying on your normal self here. Remember this moment: they must work the red ' + G.L.ctrl[d.id].t + ' right now.', 'red');
+    for (const tu of G.L.turrets) if (tu.c === 'r' && canSee(G.L, tu, s.pos)) toast('The red turret is holding fire. Your normal self will have to be hacking it right now.', 'red');
+    if (s.events.includes('fire')) sfx('fire');
+    floorEvents(s, s.i, 'inv'); deviceSounds(s, s.i);
+    if (s.over) endInv();
+  } else if (G.mode === 'nor') {
+    const n = G.n; G.prev = { me: n.pos.slice(), ghost: ghostAt(n, n.t) };
+    stepNor(G.L, n, dir);
+    if (n.events.includes('bump')) { G.bump = { dir, t0: performance.now() }; G.face.me = dir; }
+    G.cur = { me: n.pos.slice(), ghost: ghostAt(n, n.t) }; G.lastMoved = !eq(G.prev.me, G.cur.me);
+    if (G.lastMoved) footsteps(G.cur.me, 'nor', false);
+    if (!eq(G.prev.ghost, G.cur.ghost)) footsteps(G.cur.ghost, 'inv', true);
+    { const d = tileAt(G.L, n.pos[0], n.pos[1]).dev; if (d && d.t === 'bridge') G.usedBridge = true; }
+    G.face.me = faceOf(G.prev.me, G.cur.me) || G.face.me;
+    G.face.ghost = faceOf(G.cur.ghost, G.prev.ghost) || G.face.ghost; // walks backwards
+    if (n.events.includes('fire')) sfx('fire');
+    floorEvents(n, n.t, 'nor'); deviceSounds(n, n.t);
+    if (n.over) endNor();
+  }
+  hud();
+}
+function endInv() {
+  const o = G.s.over; G.running = false;
+  if (o.win) {
+    sfx('door'); G.flash = 1;
+    setTimeout(() => overlay(`<h2>Inverted run recorded</h2><p>${G.s.i} steps, ${Math.max(0, G.L.def.o2 - G.s.i)} O₂ left. Now you play the normal you, starting at this same moment. Your inverted self will walk the whole route backwards, ending in the turnstile.</p><p class="small">Blue help happens when the ghost is on it. Red jobs are yours: the timeline at the top shows exactly when.</p>`, [['Play forwards', startNor, true]]), 500);
+  } else lose(o);
+}
+function endNor() {
+  hideToast();
+  const o = G.n.over; G.running = false;
+  if (o.win) {
+    sfx('win'); G.flash = 1; saveUnlock(G.li + 2);
+    if (G.li === 0 && !G.usedBridge) achievement('Bridge? What bridge?', 'You beat level 1 without your normal self ever setting foot on the bridge.', 'You think you’re so clever, huh?', 'Don’t try to understand it. Feel it.');
+    if (G.li === LEVELS.length - 1) setTimeout(() => achievement('Temporal pincer complete', 'You beat every level of Turnstile.', 'Both of you made it out. Now forget all of it.', 'What’s happened, happened.'), 900);
+    const last = G.li === LEVELS.length - 1;
+    setTimeout(() => overlay(`<h2>${last ? 'All pincers closed' : 'Pincer complete'}</h2><p>Both of you stepped into the turnstile together.${last ? ' That was the last level. You can replay any of them from the menu.' : ''}</p>`,
+      last ? [['Menu', showTitle, true]] : [['Next level', () => loadLevel(G.li + 1), true], ['Menu', showTitle]]), 600);
+  } else lose(o);
+}
+const WHY = {
+  acid: 'You fell into the acid.',
+  fall: 'The floor gave way beneath you. In normal time the building is coming down; keep ahead of it.',
+  door: 'A closing door crushed you.',
+  laser: 'You were standing in the laser when it switched on.',
+  shot: 'Shot. Turrets fire at where you are and hit a moment later, so standing still or stepping back and forth in their sight is fatal.',
+  o2: 'Out of oxygen. Your inverted self has to reach the exit door before the O₂ runs out.',
+  annihilation: 'You touched your inverted self. Annihilation.',
+  late: 'The window closed. Your normal self has to step into the red side of the turnstile at the same moment your inverted self steps into the blue side.'
+};
+const PARADOX = {
+  acid: 'Your inverted self crossed this bridge, so it had to be raised. Stand on the red plate the whole time the ghost is on it.',
+  door: 'Your inverted self walked through this door, so it had to be open. Stand on the red plate as the ghost passes.',
+  laser: 'Your inverted self walked through this laser, so it had to be off. Stand next to the red console as the ghost passes.',
+  turret: 'Paradox: the red turret never fired at your inverted self, so it must have been hacked. Stand next to it while the ghost is in its sight.'
+};
+function lose(o) {
+  hideToast();
+  G.over = o; G.dead = true; sfx('die'); G.flash = o.why === 'o2' ? 0 : 1;
+  const type = o.why === 'o2' ? 'choke' : (o.why === 'acid' || o.why === 'fall') ? 'sink' : o.why === 'annihilation' ? 'vanish' : o.why === 'late' ? null : 'fall';
+  const dur = type === 'choke' ? 1700 : type === 'vanish' ? 700 : 900;
+  G.death = type ? { type, t0: performance.now(), dur } : null;
+  if (type === 'vanish') G.flash = 1.5;
+  if (o.why === 'shot' || o.why === 'acid' || o.why === 'laser' || o.why === 'door') burst(G.cur.me, o.why === 'acid' ? COL.acid : '#ffd27a');
+  const msg = o.why === 'paradox' ? PARADOX[o.what] : WHY[o.why];
+  const btns = G.mode === 'nor' ? [['Retry forwards', startNor, true], ['Restart level', startInv]] : [['Restart level', startInv, true]];
+  setTimeout(() => overlay(`<h2>${o.why === 'paradox' ? 'Paradox' : o.why === 'annihilation' ? 'Annihilated' : 'Failed'}</h2><p>${msg}</p>${G.mode === 'nor' ? '<p class="small">Retrying forwards keeps your inverted run. Restart if the inverted run itself needs changing.</p>' : ''}`, btns, true), 700);
+}
+
+// ---------- input ----------
+const KEYMAP = { ArrowUp: 'up', KeyW: 'up', ArrowRight: 'right', KeyD: 'right', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left' };
+function press(dir) {
+  if (G.mode !== 'inv' && G.mode !== 'nor') return;
+  if (G.dead || (G.mode === 'inv' && G.s.over) || (G.mode === 'nor' && G.n.over)) return;
+  if (!overlayOpen()) {
+    if (!G.held.includes(dir)) G.held.push(dir);
+    const now = performance.now();
+    if (!G.running) { G.running = true; G.queue = [dir]; G.lastTick = now; hideToast(); tick(); return; }
+    // standing still: take the step right now instead of waiting for the beat
+    if (meIdle()) { G.queue = [dir]; G.lastTick = now; tick(); return; }
+    G.queue = [dir]; // otherwise it happens the moment the current step lands
+  }
+}
+function meIdle() {
+  const d = G.disp && G.disp.me, c = G.cur && G.cur.me;
+  return !G.lastMoved || !d || !c || (Math.abs(d[0] - c[0]) + Math.abs(d[1] - c[1]) < 0.15);
+}
+function release(dir) { G.held = G.held.filter(d => d !== dir); }
+addEventListener('keydown', e => {
+  if (e.code in KEYMAP) { e.preventDefault(); if (!e.repeat) press(KEYMAP[e.code]); return; }
+  if (e.code === 'KeyR' && (G.mode === 'inv' || G.mode === 'nor')) { startInv(); }
+  if (e.code === 'KeyT' && G.mode === 'nor') { startNor(); }
+  if (e.code === 'KeyM') setMuted(!muted);
+  if (e.code === 'Escape') { if (G.mode !== 'title') { G.running = false; showTitle(); } }
+  if ((e.code === 'Enter' || e.code === 'Space') && overlayOpen()) { const b = document.querySelector('#overlay .primary'); if (b) { e.preventDefault(); b.click(); } }
+});
+addEventListener('keyup', e => { if (e.code in KEYMAP) release(KEYMAP[e.code]); });
+addEventListener('blur', () => { G.held = []; });
+document.querySelectorAll('.pad button').forEach(b => {
+  const d = b.dataset.dir;
+  b.addEventListener('pointerdown', e => { e.preventDefault(); b.setPointerCapture(e.pointerId); press(d); });
+  const up = () => release(d);
+  b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
+});
+
+// ---------- achievements ----------
+function achievement(title, how, quip, quote) {
+  try { const a = JSON.parse(localStorage.getItem('turnstile.ach') || '{}'); a[title] = true; localStorage.setItem('turnstile.ach', JSON.stringify(a)); } catch (e) {}
+  const el = $('ach');
+  el.innerHTML = `<div class="ach-icon" aria-hidden="true">◐</div><div><div class="ach-k">Achievement unlocked</div><div class="ach-t">${title}</div><div class="ach-d">${how}</div><div class="ach-q">${quip}<br><i>“${quote}”</i></div></div>`;
+  el.hidden = false; el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  setTimeout(() => sfx('door'), 250);
+  clearTimeout(achievement.t); achievement.t = setTimeout(() => { el.classList.remove('show'); setTimeout(() => { el.hidden = true; }, 400); }, 7000);
+}
+
+// ---------- UI ----------
+function overlay(html, btns, low) {
+  const o = $('overlay'); $('ocard').innerHTML = html; o.dataset.low = low ? '1' : '';
+  const row = document.createElement('div'); row.className = 'btns';
+  for (const [label, fn, primary] of btns) { const b = document.createElement('button'); b.textContent = label; if (primary) b.className = 'primary'; b.onclick = () => { sfx('ui'); fn(); }; row.appendChild(b); }
+  $('ocard').appendChild(row); o.hidden = false;
+  setTimeout(() => { const p = o.querySelector('.primary'); if (p) p.focus(); }, 30);
+}
+function hideOverlay() { $('overlay').hidden = true; }
+function overlayOpen() { return !$('overlay').hidden; }
+let toastTimer = 0;
+function toast(msg, tone) { const t = $('toast'); t.textContent = msg; t.dataset.tone = tone || ''; t.hidden = false; clearTimeout(toastTimer); if (tone) toastTimer = setTimeout(hideToast, 3800); }
+function hideToast() { $('toast').hidden = true; }
+function showTitle() {
+  G.mode = 'title'; G.running = false; $('hud').hidden = true; hideToast();
+  if (!G.L) { G.L = parseLevel(LEVELS[0]); G.s = newInv(G.L); G.cur = { me: G.L.B.slice() }; G.prev = G.cur; layout(); }
+  const list = LEVELS.map((lv, i) => `<button class="lvl" data-i="${i}" ${i < unlocked ? '' : 'disabled'}><span class="num">${i + 1}</span><span>${lv.name}</span></button>`).join('');
+  overlay(`<div class="title" aria-label="Turnstile"><span class="fwd">TURNSTILE</span><span class="rev" aria-hidden="true">TURNSTILE</span></div>
+  <p>A time-pincer puzzle. Walk out of the turnstile inverted, then meet yourself coming the other way.</p>
+  <ul class="rules">
+   <li><b class="b">Inverted you</b> goes first: from the turnstile to the exit door before your oxygen runs out.</li>
+   <li><b class="r">Normal you</b> then plays forwards while your inverted run replays backwards.</li>
+   <li><b class="b">Blue</b> plates, consoles and turrets are worked by your inverted self. <b class="r">Red</b> ones are your normal self’s job. If your inverted self relied on a red one, your normal self must work it at that exact moment, or it’s a paradox.</li>
+   <li>Plates: stand on them. Consoles and turrets: stand next to them.</li>
+   <li>Turrets hit where you were a moment ago. Keep moving; don’t stand still or step back and forth in their sight.</li>
+   <li>Never touch your other self. Both of you must step into the turnstile at the same moment.</li>
+  </ul>
+  <p class="small">Arrow keys or WASD. R restarts the level, T retries the forwards half, Esc opens this menu.</p>
+  <div class="levels">${list}</div>`, [['Play level ' + Math.min(unlocked, LEVELS.length), () => loadLevel(Math.min(unlocked, LEVELS.length) - 1), true]]);
+  document.querySelectorAll('.lvl').forEach(b => b.onclick = () => { sfx('ui'); loadLevel(+b.dataset.i); });
+}
+function hud() {
+  if (G.mode !== 'inv' && G.mode !== 'nor') return;
+  $('hud').hidden = false; $('hud').dataset.phase = G.mode;
+  $('lvname').textContent = `Level ${G.li + 1}: ${LEVELS[G.li].name}`;
+  $('brief').textContent = LEVELS[G.li].brief;
+  if (G.mode === 'inv') {
+    $('phase').textContent = 'Inverted';
+    $('o2wrap').hidden = false; $('tl').hidden = true;
+    const left = Math.max(0, G.L.def.o2 - G.s.i);
+    $('o2bar').style.width = (left / G.L.def.o2 * 100) + '%';
+    $('o2txt').textContent = `O₂ ${left}`;
+    $('o2wrap').classList.toggle('low', left <= 8);
+  } else {
+    $('phase').textContent = 'Normal';
+    $('o2wrap').hidden = true; $('tl').hidden = false;
+    $('tltxt').textContent = `${G.n.t} / ${G.n.T}`;
+  }
+}
+function buildTimeline() {
+  const n = G.n, L = G.L, rows = $('tlrows'); rows.innerHTML = '';
+  const T = (n.T || 1) + WINDOW, pct = t => (t / T * 100) + '%';
+  const groups = new Map();
+  for (const nd of G.needs) { if (!groups.has(nd.ctrl)) groups.set(nd.ctrl, []); groups.get(nd.ctrl).push(nd.t); }
+  const mk = (cls, label, ts) => {
+    const r = document.createElement('div'); r.className = 'tlrow ' + cls;
+    r.innerHTML = `<span class="lab">${label}</span><span class="track"></span>`;
+    const tr = r.querySelector('.track');
+    for (const t of ts) { const m = document.createElement('i'); m.style.left = pct(t - 0.5); m.style.width = pct(1); tr.appendChild(m); }
+    rows.appendChild(r);
+  };
+  for (const [c, ts] of groups) mk('need', 'You: red ' + c.t, ts);
+  // blue help
+  const help = new Map();
+  for (let t = 0; t <= T; t++) {
+    for (const id in L.ctrl) { const c = L.ctrl[id]; if (c.c === 'b' && rawAct(L, n, id, t) === true) { if (!help.has(c)) help.set(c, []); help.get(c).push(t); } }
+    for (const tu of L.turrets) if (tu.c === 'b' && rawHack(L, n, tu, t) === true) { if (!help.has(tu)) help.set(tu, []); help.get(tu).push(t); }
+  }
+  for (const [c, ts] of help) mk('help', 'Ghost: blue ' + c.t, ts);
+  const win = []; for (let t = 0; t <= T; t++) if (turnstileOpen(L, n, t)) win.push(t);
+  if (L.crumbles.length) { const ts = [...new Set(L.crumbles.map(c => n.T - c.k))].filter(t => t >= 0 && t <= T); mk('need', 'Floor collapses', ts); }
+  mk('win', 'Turnstile open', win);
+}
+
+// what the player sees: device states without the hidden one-tick leniency
+function rawAct(L, run, id, t) { return ctrlState(L, id, posAt(run, t), run.phase); }
+function rawHack(L, run, tu, t) { return turretHacked(L, tu, posAt(run, t), run.phase); }
+
+// ---------- audio ----------
+let AC = null;
+let muted = false;
+try { muted = localStorage.getItem('turnstile.muted') === '1'; } catch (e) {}
+function setMuted(m) { muted = m; try { localStorage.setItem('turnstile.muted', m ? '1' : '0'); } catch (e) {} const b = $('mute'); if (b) { b.textContent = m ? 'Sound off' : 'Sound on'; b.setAttribute('aria-pressed', String(!m)); } }
+function audio() { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); return AC; }
+// boot steps: a low thump plus gritty noise. Reversed copies swell up and stop dead.
+let STEPS = null;
+function stepBuffers() {
+  if (STEPS) return STEPS;
+  const sr = AC.sampleRate, len = Math.floor(sr * 0.16); STEPS = { fwd: [], rev: [] };
+  for (let v = 0; v < 4; v++) {
+    const b = AC.createBuffer(1, len, sr), d = b.getChannelData(0); let lp = 0, hp = 0, prev = 0;
+    const f0 = 62 + v * 9, grit = 0.35 + v * 0.08;
+    for (let i = 0; i < len; i++) {
+      const t = i / sr, w = Math.random() * 2 - 1;
+      lp += (w - lp) * 0.18; hp = w - prev; prev = w;
+      const heel = Math.sin(2 * Math.PI * f0 * t * (1 - t * 2)) * Math.exp(-t * 34);
+      const scuff = (lp * 0.8 + hp * grit * 0.25) * Math.exp(-t * (26 + v * 4)) * Math.min(1, t / 0.002);
+      const toe = t > 0.045 ? lp * 0.45 * Math.exp(-(t - 0.045) * 60) : 0;
+      d[i] = (heel * 0.75 + scuff + toe) * 0.6;
+    }
+    const r = AC.createBuffer(1, len, sr), rd = r.getChannelData(0); for (let i = 0; i < len; i++) rd[i] = d[len - 1 - i];
+    STEPS.fwd.push(b); STEPS.rev.push(r);
+  }
+  return STEPS;
+}
+let stepN = 0;
+function footsteps(at, kind, reversed) {
+  if (muted || reduceMotion && false) return;
+  try {
+    audio(); const B = stepBuffers();
+    const [sx] = P(at[0], at[1]), pan = Math.max(-1, Math.min(1, (sx - VW / 2) / (VW / 2))) * 0.6;
+    for (let k = 0; k < 2; k++) { // two footfalls per tile
+      const src = AC.createBufferSource(), g = AC.createGain(), f = AC.createBiquadFilter();
+      const buf = (reversed ? B.rev : B.fwd)[(stepN++) % 4]; src.buffer = buf;
+      src.playbackRate.value = (kind === 'inv' ? 0.9 : 1.05) * (0.96 + Math.random() * 0.08);
+      f.type = 'lowpass'; f.frequency.value = reversed ? 1600 : kind === 'inv' ? 2400 : 5000;
+      g.gain.value = reversed ? 0.05 : 0.08; // faint, in the background
+      let node = src; node.connect(f); node = f;
+      if (AC.createStereoPanner) { const pn = AC.createStereoPanner(); pn.pan.value = pan; node.connect(pn); node = pn; }
+      node.connect(g); g.connect(AC.destination);
+      // a reversed step builds up to the moment the foot lands, so start it early
+      const land = AC.currentTime + 0.02 + k * TICK / 2000;
+      src.start(reversed ? Math.max(AC.currentTime, land - buf.duration / src.playbackRate.value + 0.03) : land);
+    }
+  } catch (e) {}
+}
+// ---- device sounds: hydraulic bridges, electric hacks, swooshing doors ----
+let NOISE = null;
+function noiseBuf() { if (NOISE) return NOISE; const n = AC.sampleRate * 2, b = AC.createBuffer(1, n, AC.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1; return (NOISE = b); }
+function out(pan, gain, at) { // returns an input node routed through gain + pan
+  const g = AC.createGain(); g.gain.value = gain; let node = g;
+  if (AC.createStereoPanner) { const p = AC.createStereoPanner(); p.pan.value = pan; g.connect(p); node = p; }
+  node.connect(AC.destination); return g;
+}
+function panAt(x, y) { const [sx] = P(x, y); return Math.max(-1, Math.min(1, (sx - VW / 2) / (VW / 2))) * 0.6; }
+function sndHydraulic(up, pan) {
+  const t = AC.currentTime, dst = out(pan, 0.11), dur = 0.55;
+  // hiss of escaping pressure
+  const n = AC.createBufferSource(); n.buffer = noiseBuf(); const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 1.2;
+  bp.frequency.setValueAtTime(up ? 1800 : 2600, t); bp.frequency.linearRampToValueAtTime(up ? 2600 : 1400, t + dur);
+  const ng = AC.createGain(); ng.gain.setValueAtTime(0, t); ng.gain.linearRampToValueAtTime(0.5, t + 0.06); ng.gain.exponentialRampToValueAtTime(0.01, t + dur);
+  n.connect(bp); bp.connect(ng); ng.connect(dst); n.start(t, Math.random()); n.stop(t + dur);
+  // pump motor
+  const o = AC.createOscillator(), lp = AC.createBiquadFilter(), og = AC.createGain(); o.type = 'sawtooth'; lp.type = 'lowpass'; lp.frequency.value = 400;
+  o.frequency.setValueAtTime(up ? 48 : 85, t); o.frequency.linearRampToValueAtTime(up ? 85 : 45, t + dur * 0.8);
+  og.gain.setValueAtTime(0, t); og.gain.linearRampToValueAtTime(0.6, t + 0.05); og.gain.setValueAtTime(0.6, t + dur * 0.7); og.gain.exponentialRampToValueAtTime(0.01, t + dur);
+  o.connect(lp); lp.connect(og); og.connect(dst); o.start(t); o.stop(t + dur);
+  // locking clunk
+  const k = AC.createOscillator(), kg = AC.createGain(); k.type = 'sine'; k.frequency.setValueAtTime(120, t + dur * 0.8); k.frequency.exponentialRampToValueAtTime(40, t + dur * 0.8 + 0.12);
+  kg.gain.setValueAtTime(0, t); kg.gain.setValueAtTime(0.9, t + dur * 0.8); kg.gain.exponentialRampToValueAtTime(0.01, t + dur * 0.8 + 0.14);
+  k.connect(kg); kg.connect(dst); k.start(t); k.stop(t + dur + 0.2);
+}
+function sndZap(pan, strength) {
+  const t = AC.currentTime, dst = out(pan, 0.07 * strength), dur = 0.35 + 0.15 * strength;
+  // crackle: noise chopped into random sparks
+  const n = AC.createBufferSource(); n.buffer = noiseBuf(); const hp = AC.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
+  const ng = AC.createGain(); ng.gain.setValueAtTime(0, t);
+  for (let u = 0; u < dur; u += 0.012 + Math.random() * 0.03) { const v = Math.random() < 0.55 ? 0.3 + Math.random() * 0.7 : 0; ng.gain.setValueAtTime(v, t + u); }
+  ng.gain.setValueAtTime(0, t + dur);
+  n.connect(hp); hp.connect(ng); ng.connect(dst); n.start(t, Math.random()); n.stop(t + dur);
+  // mains buzz
+  const o = AC.createOscillator(), og = AC.createGain(), bp = AC.createBiquadFilter(); o.type = 'square'; o.frequency.value = 100 + Math.random() * 20;
+  bp.type = 'bandpass'; bp.frequency.value = 900; bp.Q.value = 3;
+  og.gain.setValueAtTime(0.35, t); og.gain.exponentialRampToValueAtTime(0.01, t + dur);
+  o.connect(bp); bp.connect(og); og.connect(dst); o.start(t); o.stop(t + dur);
+}
+function sndSwoosh(open, pan) {
+  const t = AC.currentTime, dst = out(pan, 0.13), dur = 0.38;
+  const n = AC.createBufferSource(); n.buffer = noiseBuf(); const bp = AC.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 2.5;
+  bp.frequency.setValueAtTime(open ? 350 : 2400, t); bp.frequency.exponentialRampToValueAtTime(open ? 2400 : 350, t + dur);
+  const ng = AC.createGain(); ng.gain.setValueAtTime(0.001, t); ng.gain.exponentialRampToValueAtTime(0.8, t + dur * 0.45); ng.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  n.connect(bp); bp.connect(ng); ng.connect(dst); n.start(t, Math.random()); n.stop(t + dur);
+  if (!open) { // shuts with a thud
+    const k = AC.createOscillator(), kg = AC.createGain(); k.frequency.setValueAtTime(90, t + dur * 0.85); k.frequency.exponentialRampToValueAtTime(35, t + dur + 0.1);
+    kg.gain.setValueAtTime(0, t); kg.gain.setValueAtTime(0.8, t + dur * 0.85); kg.gain.exponentialRampToValueAtTime(0.01, t + dur + 0.12);
+    k.connect(kg); kg.connect(dst); k.start(t); k.stop(t + dur + 0.15);
+  }
+}
+function devSnapshot(run, t) {
+  const L = G.L, snap = {};
+  for (const id in L.ctrl) snap['c' + id] = rawAct(L, run, id, t) === true;
+  L.turrets.forEach((tu, k) => { snap['t' + k] = rawHack(L, run, tu, t) === true; });
+  return snap;
+}
+function deviceSounds(run, t) {
+  const L = G.L, now = devSnapshot(run, t), was = G.devPrev || devSnapshot(run, Math.max(0, t - 1)); G.devPrev = now;
+  if (muted) return;
+  try {
+    audio();
+    for (const id in L.ctrl) {
+      const a = now['c' + id], b = was['c' + id]; if (a === b) continue;
+      const targets = L.devs.filter(d => d.id == id && (d.t === 'bridge' || d.t === 'door' || d.t === 'laser'));
+      const br = targets.filter(d => d.t === 'bridge'), dr = targets.filter(d => d.t === 'door'), ls = targets.filter(d => d.t === 'laser');
+      if (br.length) sndHydraulic(a, panAt(br[0].x, br[0].y));
+      for (const d of dr) sndSwoosh(a, panAt(d.x, d.y));
+      for (const d of ls) sndZap(panAt(d.x, d.y), 0.6);
+      if (L.ctrl[id].t === 'console' && a) sndZap(panAt(L.ctrl[id].x, L.ctrl[id].y), 0.5);
+    }
+    L.turrets.forEach((tu, k) => { if (now['t' + k] && !was['t' + k]) sndZap(panAt(tu.x, tu.y), 1); });
+  } catch (e) {}
+}
+function sfx(k) {
+  if (muted) return;
+  try {
+    audio();
+    const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain(); o.connect(g); g.connect(AC.destination);
+    const S = { fire: [880, 220, .05, .08, 'square'], die: [200, 40, .5, .2, 'sawtooth'], win: [330, 990, .6, .15, 'triangle'], door: [520, 260, .35, .12, 'triangle'], ui: [660, 660, .05, .05, 'sine'], step: [120, 90, .04, .04, 'sine'] }[k];
+    if (!S) return;
+    o.type = S[4]; o.frequency.setValueAtTime(S[0], t); o.frequency.exponentialRampToValueAtTime(S[1], t + S[2]);
+    g.gain.setValueAtTime(S[3], t); g.gain.exponentialRampToValueAtTime(0.0001, t + S[2]); o.start(t); o.stop(t + S[2] + .02);
+  } catch (e) {}
+}
+
+// ---------- drawing helpers ----------
+// a floor-tile shaped quad of width w (in TW units scaled) centred on a screen point
+function tileCorner(cx, cy, s, u, v) { return [cx + (u * CA - v * SA) * s / Math.SQRT2, cy + (u * SA + v * CA) * s / (2 * Math.SQRT2)]; }
+function diamond(cx, cy, w) { const c = [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]].map(([u, v]) => tileCorner(cx, cy, w, u, v)); ctx.beginPath(); ctx.moveTo(c[0][0], c[0][1]); for (let i = 1; i < 4; i++) ctx.lineTo(c[i][0], c[i][1]); ctx.closePath(); }
+function box(x, y, inset, hgt, top, left, right, lift = 0) {
+  const [cx, cy0] = P(x, y), cy = cy0 - lift, w = TW * (1 - inset * 2), h = w / 2;
+  ctx.fillStyle = left; ctx.beginPath(); ctx.moveTo(cx - w / 2, cy); ctx.lineTo(cx, cy + h / 2); ctx.lineTo(cx, cy + h / 2 - hgt); ctx.lineTo(cx - w / 2, cy - hgt); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = right; ctx.beginPath(); ctx.moveTo(cx + w / 2, cy); ctx.lineTo(cx, cy + h / 2); ctx.lineTo(cx, cy + h / 2 - hgt); ctx.lineTo(cx + w / 2, cy - hgt); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = top; diamond(cx, cy - hgt, w, h); ctx.fill();
+}
+function hexA(hex, a) { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; }
+function lerp(a, b, f) { return a + (b - a) * f; }
+function anim(key, target, rate = 0.18) { const v = G.anim[key] ?? target; const nv = v + (target - v) * rate; G.anim[key] = Math.abs(nv - target) < 0.002 ? target : nv; return G.anim[key]; }
+
+function curPos() {
+  if (G.mode === 'nor' || (G.n && G.mode !== 'inv' && G.mode !== 'title')) { const n = G.n; return { inv: ghostAt(n, n.t), nor: n.pos }; }
+  return { inv: G.s ? G.s.pos : G.L.B };
+}
+function phaseKey() { return G.n && G.mode !== 'inv' && G.mode !== 'title' ? 'nor' : 'inv'; }
+function nowT(frac) { if (phaseKey() === 'nor') return G.n.t + frac; return (G.s ? G.s.i : 0) + frac; }
+
+// ---------- frame ----------
+function frame(now) {
+  requestAnimationFrame(frame);
+  if (G.running && (G.mode === 'inv' || G.mode === 'nor')) {
+    if (now - G.lastTick >= TICK) { G.lastTick += TICK; if (now - G.lastTick > TICK) G.lastTick = now; tick(); }
+  }
+  const frac = G.running ? Math.min(1, (now - G.lastTick) / TICK) : 1;
+  const dt = Math.min(100, now - (G.lastFrame || now)); G.lastFrame = now;
+  for (const k of ['me', 'ghost']) {
+    const tg = G.cur && G.cur[k]; if (!tg) { G.disp[k] = null; continue; }
+    let d = G.disp[k];
+    if (!d || Math.abs(d[0] - tg[0]) + Math.abs(d[1] - tg[1]) > 2.5) { G.disp[k] = tg.slice(); G.dispMoving[k] = false; continue; }
+    const dx = tg[0] - d[0], dy = tg[1] - d[1], dist = Math.hypot(dx, dy);
+    const step = dt / TICK * Math.max(1, dist); // one tile per beat, catching up if behind
+    if (dist <= step) { G.walk[k] += dist; G.disp[k] = tg.slice(); G.dispMoving[k] = dist > 0.001 && G.lastMoved; }
+    else { G.walk[k] += step; G.disp[k] = [d[0] + dx / dist * step, d[1] + dy / dist * step]; G.dispMoving[k] = true; }
+  }
+  render(now, frac);
+}
+
+function render(now, frac) {
+  now = now || performance.now();
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (G.shake > 0.01 && !reduceMotion) { ctx.translate((Math.random() - .5) * G.shake * 7, (Math.random() - .5) * G.shake * 5); G.shake *= 0.9; }
+  const pk = phaseKey();
+  const bg = ctx.createRadialGradient(VW / 2, VH * 0.45, 50, VW / 2, VH * 0.5, Math.max(VW, VH) * 0.8);
+  bg.addColorStop(0, pk === 'inv' ? '#1e2a36' : '#2c2224'); bg.addColorStop(1, '#0d1013');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, VW, VH);
+  const L = G.L; if (!L) return;
+  const pos = curPos(), time = now / 1000;
+  const run = pk === 'nor' ? G.n : G.s, rt = run ? curT(run) : 0;
+  const st = id => run ? rawAct(L, run, id, rt) : ctrlState(L, id, pos, pk);
+
+  // ground
+  for (let d = 0; d < L.W + L.H; d++) for (let y = 0; y < L.H; y++) {
+    const x = d - y; if (x < 0 || x >= L.W) continue;
+    const t = L.tiles[y][x]; if (t.base === 'void' || t.base === 'wall') continue;
+    if (t.crumble != null) { drawCrumble(x, y, t, run, rt, pk, time); continue; }
+    const [cx, cy] = P(x, y);
+    if (t.base === 'acid') drawAcid(x, y, time);
+    else {
+      const v = ((x * 7 + y * 13) % 5) * 2;
+      ctx.fillStyle = `rgb(${52 + v},${57 + v},${64 + v})`; diamond(cx, cy, TW, TW / 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 1; diamond(cx, cy, TW - 2, TW / 2 - 1); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,.04)'; diamond(cx, cy, TW * 0.6, TW * 0.3); ctx.stroke();
+    }
+    if (t.special === 'S') { ctx.strokeStyle = hexA(COL.red, 0.6); ctx.lineWidth = 2; diamond(cx, cy, TW * 0.6, TW * 0.3); ctx.stroke(); }
+    if (t.special === 'B' || t.special === 'R') {
+      const c = t.special === 'B' ? COL.blue : COL.red; ctx.fillStyle = hexA(c, 0.25); diamond(cx, cy, TW * 0.9, TW * 0.45); ctx.fill();
+    }
+    const dv = t.dev;
+    if (dv && dv.t === 'plate') drawPlate(dv, st(dv.id) === true, time);
+    if (dv && dv.t === 'bridge') drawBridge(dv, st(dv.id), time);
+  }
+  // turret coverage
+  L.turrets.forEach((tu, k) => {
+    const h = run ? rawHack(L, run, tu, rt) : false; const c = tu.c === 'b' ? COL.blue : COL.red;
+    for (const [x, y] of G.coverage[k]) { const [cx, cy] = P(x, y); ctx.fillStyle = h ? 'rgba(255,255,255,.02)' : 'rgba(255,190,80,.10)'; diamond(cx, cy, TW * 0.9, TW * 0.45); ctx.fill(); }
+  });
+  // console / hack zones
+  for (const z of G.zones) {
+    const [cx, cy] = P(z.x, z.y), col = z.c === 'b' ? COL.blue : COL.red;
+    const mine = (pk === 'inv') === (z.c === 'b');
+    const worked = z.d.t === 'turret' ? (run && rawHack(L, run, z.d, rt) === true) : ctrlState(L, z.d.id, pos, pk) === true;
+    const who = z.c === 'b' ? pos.inv : pos.nor, here = who && who[0] === z.x && who[1] === z.y;
+    const pulse = 0.5 + 0.5 * Math.sin(time * 4);
+    ctx.fillStyle = hexA(col, here ? 0.32 + pulse * 0.12 : worked ? 0.2 : mine ? 0.13 : 0.06);
+    diamond(cx, cy, TW * 0.84, TW * 0.42); ctx.fill();
+    ctx.lineWidth = here ? 2 : 1.4; ctx.strokeStyle = hexA(col, here ? 0.95 : mine ? 0.65 : 0.35);
+    if (!mine) ctx.setLineDash([3, 3]);
+    // corner brackets pointing at the tile centre
+    const f = 0.28;
+    const V = [[-.5, -.5], [.5, -.5], [.5, .5], [-.5, .5]].map(([u, v]) => tileCorner(cx, cy, TW * 0.84, u, v));
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) { const A = V[i], B = V[(i + 1) % 4], C = V[(i + 3) % 4];
+      ctx.moveTo(A[0] + (C[0] - A[0]) * f, A[1] + (C[1] - A[1]) * f); ctx.lineTo(A[0], A[1]); ctx.lineTo(A[0] + (B[0] - A[0]) * f, A[1] + (B[1] - A[1]) * f); }
+    ctx.stroke(); ctx.setLineDash([]);
+  }
+  // upcoming red jobs (normal phase)
+  if (pk === 'nor' && !G.dead) {
+    for (const nd of G.needs) {
+      const dt = nd.t - G.n.t; if (dt < 0 || dt > 6) continue;
+      const c = nd.ctrl; const [cx, cy] = P(c.x, c.y);
+      ctx.strokeStyle = hexA(COL.red, dt === 0 ? 1 : 0.3 + (6 - dt) * 0.1); ctx.lineWidth = 2;
+      const r = 0.7 + dt * 0.08 + 0.04 * Math.sin(time * 8); diamond(cx, cy, TW * r * 1.3, TW * r * 0.65); ctx.stroke();
+    }
+  }
+  if (G.over && G.over.at) { const [cx, cy] = P(G.over.at[0], G.over.at[1]); ctx.strokeStyle = hexA(COL.red, 0.6 + 0.4 * Math.sin(time * 10)); ctx.lineWidth = 3; diamond(cx, cy, TW * 1.1, TW * 0.55); ctx.stroke(); }
+
+  // objects (depth-sorted)
+  const objs = [];
+  for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) {
+    const t = L.tiles[y][x];
+    if (t.base === 'wall') { let edge = false; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const b = tileAt(L, x + dx, y + dy).base; if (b !== 'wall' && b !== 'void') edge = true; } if (edge) objs.push({ d: dep(x, y), f: () => drawWall(x, y) }); }
+    if (t.dev && (t.dev.t === 'door' || t.dev.t === 'laser' || t.dev.t === 'console' || t.dev.t === 'turret')) objs.push({ d: dep(x, y) + 0.1, f: () => drawDev(t.dev, pos, pk, time) });
+  }
+  for (const cb of G.cables) { const s = st(cb.id); for (let i = 0; i < cb.path.length - 1; i++) { const a = cb.path[i], b = cb.path[i + 1]; objs.push({ d: Math.max(dep(a[0], a[1]), dep(b[0], b[1])) + 0.05, f: () => drawCableSeg(cb, i, s, time) }); } }
+  for (let y = 0; y < L.H; y++) for (let x = 0; x < L.W; x++) {
+    const t = L.tiles[y][x];
+    if (t.special === 'B' || t.special === 'R') objs.push({ d: dep(x, y) + 0.6, f: () => drawGate(x, y, t.special, pos, time) });
+    if (t.special === 'D') objs.push({ d: dep(x, y) + 0.05, f: () => drawExit(x, y, time) });
+  }
+  let bx = 0, by = 0;
+  if (G.bump && G.bump.dir) { const k = (performance.now() - G.bump.t0) / 140; if (k < 1) { const a = Math.sin(k * Math.PI) * 0.12; bx = DIRV[G.bump.dir][0] * a; by = DIRV[G.bump.dir][1] * a; } else G.bump = null; }
+  if (G.mode !== 'title' && G.disp.me) {
+    const dm = G.disp.me, p = [dm[0] + bx, dm[1] + by], mv = G.dispMoving.me;
+    const die = G.death ? { k: Math.min(1, (now - G.death.t0) / G.death.dur), type: G.death.type } : null;
+    if (pk === 'inv') { objs.push({ d: dep(p[0], p[1]) + 0.3, f: () => agentAt(p, 'inv', G.face.me, mv && !die, G.walk.me % 1, 1, time, false, die) }); }
+    else {
+      const g = G.disp.ghost || G.cur.ghost, gm = G.dispMoving.ghost;
+      const gdie = die && die.type === 'vanish' ? die : (G.over && G.over.why === 'paradox' && G.death ? { k: die.k, type: G.over.what === 'acid' ? 'sink' : 'fall' } : null);
+      const mdie = G.over && G.over.why === 'paradox' ? null : die;
+      objs.push({ d: dep(p[0], p[1]) + 0.3, f: () => agentAt(p, 'nor', G.face.me, mv && !die, G.walk.me % 1, 1, time, false, mdie) });
+      objs.push({ d: dep(g[0], g[1]) + 0.3, f: () => { agentAt(g, 'inv', G.face.ghost, gm && !die, 1 - (G.walk.ghost % 1), 0.85, time, true, gdie); } });
+    }
+  }
+  objs.sort((a, b) => a.d - b.d); for (const o of objs) o.f();
+
+  drawBadges();
+  drawShots(nowT(frac), pk);
+  if (pk === 'inv' && G.s && G.mode === 'inv') {
+    const left = G.L.def.o2 - G.s.i; let v = left <= 6 ? (6 - left) / 6 * 0.45 * (0.8 + 0.2 * Math.sin(time * 6)) : 0;
+    if (G.death && G.death.type === 'choke') v = 0.45 + 0.45 * Math.min(1, (now - G.death.t0) / G.death.dur);
+    if (v > 0) { const vg = ctx.createRadialGradient(VW / 2, VH / 2, Math.min(VW, VH) * 0.15, VW / 2, VH / 2, Math.max(VW, VH) * 0.7); vg.addColorStop(0, 'rgba(5,10,20,0)'); vg.addColorStop(1, `rgba(5,10,20,${v})`); ctx.fillStyle = vg; ctx.fillRect(0, 0, VW, VH); }
+  }
+  drawParts(pk);
+  if (G.flash > 0) { ctx.fillStyle = `rgba(255,255,255,${G.flash * 0.35})`; ctx.fillRect(0, 0, VW, VH); G.flash = Math.max(0, G.flash - 0.05); }
+  if (pk === 'nor' && G.n) { // timeline cursor
+    const c = $('tlcur'); if (c) c.style.left = (Math.min(1, (G.n.t + (G.running ? frac : 0)) / ((G.n.T || 1) + WINDOW)) * 100) + '%';
+  }
+}
+
+function drawWall(x, y) {
+  const h = TW * 0.16;
+  prism(x - 0.5, y - 0.5, x + 0.5, y + 0.5, 0, h, '#1f2328', '#15181c', '#1a1d22');
+  const [cx, cy] = P(x, y); ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1; diamond(cx, cy - h, TW - 2, TW / 2 - 1); ctx.stroke();
+}
+function drawExit(x, y, time) {
+  const [cx, cy] = P(x, y), h = TW * 0.75;
+  ctx.strokeStyle = hexA(COL.blue, 0.9); ctx.lineWidth = 3; ctx.shadowColor = COL.blue; ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.moveTo(cx - TW * 0.3, cy + TW * 0.02); ctx.lineTo(cx - TW * 0.3, cy - h); ctx.lineTo(cx + TW * 0.3, cy - h); ctx.lineTo(cx + TW * 0.3, cy + TW * 0.02); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.fillStyle = hexA(COL.blue, 0.12 + 0.06 * Math.sin(time * 3)); ctx.fillRect(cx - TW * 0.3, cy - h, TW * 0.6, h);
+}
+function drawGate(x, y, side, pos, time) {
+  const [cx, cy] = P(x, y), h = TW * 1.05, c = side === 'B' ? COL.blue : COL.red;
+  const open = side === 'B' ? true : phaseKey() === 'nor' && turnstileOpen(G.L, G.n, G.n.t);
+  ctx.fillStyle = hexA(c, open ? 0.22 : 0.08); ctx.fillRect(cx - TW * 0.3, cy - h, TW * 0.6, h);
+  ctx.strokeStyle = hexA(c, 0.9); ctx.lineWidth = 2; ctx.strokeRect(cx - TW * 0.3, cy - h, TW * 0.6, h);
+  // rotating vanes (blue spins backwards)
+  const dirn = side === 'B' ? -1 : 1;
+  for (let k = 0; k < 3; k++) {
+    const ph = ((time * 0.6 * dirn + k / 3) % 1 + 1) % 1, yy = cy - h * ph;
+    ctx.strokeStyle = hexA(c, 0.25 + 0.5 * Math.sin(ph * Math.PI)); ctx.beginPath(); ctx.ellipse(cx, yy, TW * 0.28, TW * 0.08, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  if (!open) { ctx.strokeStyle = hexA(c, 0.7); ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(cx - TW * 0.3, cy - h * 0.5); ctx.lineTo(cx + TW * 0.3, cy - h * 0.5); ctx.stroke(); ctx.setLineDash([]); }
+}
+function drawDev(d, pos, pk, time) {
+  const L = G.L;
+  const run = pk === 'nor' ? G.n : G.s, act = id => run ? rawAct(L, run, id, curT(run)) : ctrlState(L, id, pos, pk);
+  if (d.t === 'door') drawDoor(d, act(d.id), time);
+  if (d.t === 'laser') drawLaser(d, act(d.id), time);
+  if (d.t === 'console') drawConsole(d, ctrlState(L, d.id, pos, pk) === true, time);
+  if (d.t === 'turret') drawTurret(d, pos, pk, time);
+}
+// ===== device sprites v2 =====
+const HAZ = '#ffb23a';           // danger colour (lasers, turret sights)
+const WALLH = () => TW * 0.16;
+const P3 = (x, y, z) => { const p = P(x, y); return [p[0], p[1] - z]; };
+function poly(pts, fill, stroke, lw) { ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]); ctx.closePath(); if (fill) { ctx.fillStyle = fill; ctx.fill(); } if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.stroke(); } }
+// axis-aligned box in tile coordinates; z in pixels
+function prism(x0, y0, x1, y1, z0, z1, top, fx, fy) {
+  poly([P3(x1, y0, z0), P3(x1, y1, z0), P3(x1, y1, z1), P3(x1, y0, z1)], fx);
+  poly([P3(x0, y1, z0), P3(x1, y1, z0), P3(x1, y1, z1), P3(x0, y1, z1)], fy);
+  poly([P3(x0, y0, z1), P3(x1, y0, z1), P3(x1, y1, z1), P3(x0, y1, z1)], top);
+}
+const hash = (a, b, c) => { const s = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453; return s - Math.floor(s); };
+const ctrlCol = id => G.L.ctrl[id] && G.L.ctrl[id].c === 'b' ? COL.blue : COL.red;
+// corridor axis through a tile: 'y' if the tile is boxed in on its x sides
+function axisAt(x, y) { const L = G.L, b = (a, c) => { const t = tileAt(L, a, c).base; return t === 'wall' || t === 'void' || t === 'solid'; }; return (b(x - 1, y) && b(x + 1, y)) ? 'y' : (b(x, y - 1) && b(x, y + 1)) ? 'x' : (tileAt(L, x, y - 1).base === 'acid' || tileAt(L, x, y + 1).base === 'acid') ? 'y' : 'x'; }
+
+// ---- collapsing floor ----
+function floorEvents(run, t, ph) {
+  const L = G.L; if (!L.crumbles.length) return;
+  const hit = L.crumbles.filter(c => ph === 'nor' ? run.T - c.k === t : c.k + 1 === t);
+  if (!hit.length) return;
+  G.shake = Math.max(G.shake || 0, ph === 'nor' ? 1 : 0.6);
+  rumble(ph === 'inv');
+  for (const c of hit) { const [x, y] = P(c.x, c.y);
+    for (let i = 0; i < 6; i++) G.parts.push(ph === 'nor'
+      ? { x: x + (Math.random() - .5) * TW * .6, y: y, vx: (Math.random() - .5) * 2, vy: -Math.random() * 2, life: 1, c: '#8a919a', big: true }
+      : { x: x + (Math.random() - .5) * TW * 1.4, y: y + TW * .5 + Math.random() * TW * .4, vx: 0, vy: -1.6 - Math.random(), life: .6, c: '#c9d1da', big: true }); }
+}
+function rumble(reversed) {
+  if (muted) return;
+  try {
+    audio(); const sr = AC.sampleRate, len = Math.floor(sr * 0.9), b = AC.createBuffer(1, len, sr), d = b.getChannelData(0); let lp = 0;
+    for (let i = 0; i < len; i++) { const t = i / sr; lp += ((Math.random() * 2 - 1) - lp) * 0.04; d[i] = lp * 3 * Math.min(1, t / 0.01) * Math.exp(-t * 4.5); }
+    if (reversed) d.reverse();
+    const src = AC.createBufferSource(), g = AC.createGain(); src.buffer = b; g.gain.value = 0.35; src.connect(g); g.connect(AC.destination); src.start();
+  } catch (e) {}
+}
+function drawCrumble(x, y, tl, run, rt, pk, time) {
+  const [cx, cy] = P(x, y);
+  const present = !run || !goneAt(G.L, run, tl, rt);
+  const until = !run ? 99 : pk === 'nor' ? (run.T - tl.crumble) - rt : (tl.crumble + 1) - rt; // steps until it falls / returns
+  const a = anim('cr' + x + ',' + y, present ? 1 : 0, 0.09);
+  if (a < 0.03) { // a hole: broken lip and drifting dust
+    ctx.strokeStyle = 'rgba(140,150,160,.18)'; ctx.setLineDash([2, 5]); diamond(cx, cy, TW * 0.92); ctx.stroke(); ctx.setLineDash([]);
+    if (pk === 'inv' && until > 0 && until <= 3) { // fragments gathering below, about to rise
+      ctx.globalAlpha = 0.25 + (3 - until) * 0.15; ctx.fillStyle = '#56606b'; diamond(cx, cy + TW * 0.12 * until, TW * (0.5 + (3 - until) * 0.12)); ctx.fill(); ctx.globalAlpha = 1;
+    }
+  } else {
+    const drop = (1 - a) * TW * 0.7, jit = present && pk === 'nor' && until <= 2 && !reduceMotion ? (Math.random() - .5) * (3 - until) * 1.5 : 0;
+    ctx.globalAlpha = a; const v = ((x * 7 + y * 13) % 5) * 2;
+    ctx.fillStyle = `rgb(${50 + v},${54 + v},${60 + v})`; diamond(cx + jit, cy + drop, TW); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.4)'; ctx.lineWidth = 1; diamond(cx + jit, cy + drop, TW - 2); ctx.stroke();
+    // warning cracks (normal time) or fresh seams (inverted)
+    const sev = pk === 'nor' ? Math.max(0, 4 - until) : Math.max(0, 3 - (rt - tl.crumble - 1));
+    if (sev > 0) {
+      ctx.strokeStyle = pk === 'nor' ? `rgba(255,178,58,${0.25 + sev * 0.18})` : `rgba(200,215,230,${sev * 0.15})`; ctx.lineWidth = 1.2; ctx.beginPath();
+      for (let k = 0; k < sev + 1; k++) { let px = cx + jit + (hash(x, y, k) - .5) * TW * .5, py = cy + drop + (hash(x, y, k + 9) - .5) * TW * .2; ctx.moveTo(px, py);
+        for (let j = 0; j < 3; j++) { px += (hash(x, y, k * 7 + j) - .5) * TW * .3; py += (hash(x, y, k * 5 + j + 3) - .5) * TW * .15; ctx.lineTo(px, py); } }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ---- acid pit ----
+function drawAcid(x, y, time) {
+  const L = G.L, [cx, cy] = P(x, y), w = TW, h = TW / 2, dp = TW * 0.17;
+  const isA = (a, b) => tileAt(L, a, b).base === 'acid';
+  ctx.save(); diamond(cx, cy, w, h); ctx.clip();
+  const g = ctx.createLinearGradient(cx, cy - h / 2, cx, cy + h / 2);
+  g.addColorStop(0, '#4f8a12'); g.addColorStop(1, '#8fd42a');
+  ctx.fillStyle = g; ctx.fillRect(cx - w, cy - h, w * 2, h * 2);
+  // slow glossy ripples
+  for (let j = 0; j < 2; j++) {
+    const ph = (time * 0.35 + hash(x, y, j)) % 1;
+    ctx.strokeStyle = `rgba(220,255,140,${0.35 * (1 - ph)})`; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(cx + (hash(x, y, j + 5) - .5) * w * .4, cy + dp * .5 + (hash(x, y, j + 9) - .5) * h * .3, w * .08 + ph * w * .22, h * .05 + ph * h * .2, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  // bubbles
+  for (let j = 0; j < 3; j++) {
+    const ph = (time * (0.5 + hash(x, y, j + 20) * 0.6) + hash(x, y, j)) % 1;
+    const bx = cx + (hash(x, y, j + 30) - .5) * w * .5, by = cy + dp * .45 + (hash(x, y, j + 40) - .5) * h * .4;
+    const r = TW * 0.018 + ph * TW * 0.03;
+    ctx.strokeStyle = `rgba(230,255,160,${ph < .9 ? .85 : (1 - ph) * 8})`; ctx.fillStyle = 'rgba(200,255,120,.25)'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.arc(bx, by - ph * 3, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
+  // inner pit walls on the far edges
+  const Lv = P(x - .5, y + .5), T = P(x - .5, y - .5), R = P(x + .5, y - .5);
+  if (!isA(x - 1, y)) poly([Lv, T, [T[0], T[1] + dp], [Lv[0], Lv[1] + dp]], '#1a1d17');
+  if (!isA(x, y - 1)) poly([T, R, [R[0], R[1] + dp], [T[0], T[1] + dp]], '#262a1f');
+  // waterline glow
+  ctx.strokeStyle = 'rgba(190,255,90,.5)'; ctx.lineWidth = 1.5; ctx.beginPath();
+  if (!isA(x - 1, y)) { ctx.moveTo(Lv[0], Lv[1] + dp); ctx.lineTo(T[0], T[1] + dp); }
+  if (!isA(x, y - 1)) { ctx.moveTo(T[0], T[1] + dp); ctx.lineTo(R[0], R[1] + dp); }
+  ctx.stroke();
+  ctx.restore();
+  // hazard-striped rim wherever the pit meets floor
+  const B = P(x + .5, y + .5), edges = [[x - 1, y, Lv, T], [x, y - 1, T, R], [x + 1, y, R, B], [x, y + 1, B, Lv]];
+  for (const [nx, ny, a, b] of edges) {
+    const nb = tileAt(L, nx, ny).base; if (nb === 'acid' || nb === 'void') continue;
+    ctx.lineWidth = 3; ctx.strokeStyle = '#15171a'; ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = '#f2c230'; ctx.stroke(); ctx.setLineDash([]);
+  }
+  // fumes
+  if (!reduceMotion) for (let j = 0; j < 2; j++) {
+    const ph = (time * 0.25 + hash(x, y, j + 60)) % 1;
+    ctx.fillStyle = `rgba(170,230,80,${0.12 * Math.sin(ph * Math.PI)})`;
+    ctx.beginPath(); ctx.ellipse(cx + (hash(x, y, j + 70) - .5) * w * .4, cy - ph * TW * 0.5, TW * (0.06 + ph * 0.08), TW * (0.03 + ph * 0.04), 0, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+// ---- retractable bridge ----
+function drawBridge(d, s, time) {
+  const L = G.L, x = d.x, y = d.y, c = ctrlCol(d.id), spec = s === 'spec';
+  const a = anim('b' + x + ',' + y, s === true ? 1 : 0, 0.2), dp = TW * 0.17;
+  const ax = d.ax || (d.ax = axisAt(x, y));
+  const hw = 0.36; // half width across walking direction
+  const [x0, x1, y0, y1] = ax === 'y' ? [x - hw, x + hw, y - 0.5, y + 0.5] : [x - 0.5, x + 0.5, y - hw, y + hw];
+  if (spec) { // future bridge your normal self must raise
+    ctx.setLineDash([5, 4]); ctx.lineDashOffset = -time * 20;
+    poly([P3(x0, y0, 2), P3(x1, y0, 2), P3(x1, y1, 2), P3(x0, y1, 2)], hexA(c, 0.16 + 0.06 * Math.sin(time * 5)), hexA(c, .95), 1.5);
+    ctx.setLineDash([]); return;
+  }
+  if (a < 0.02) { // lowered: a submerged deck outline shows where it will rise
+    const zz = -dp * .55, Q = [P3(x0, y0, zz), P3(x1, y0, zz), P3(x1, y1, zz), P3(x0, y1, zz)];
+    poly(Q, 'rgba(40,70,20,.55)');
+    ctx.strokeStyle = 'rgba(30,50,15,.6)'; ctx.lineWidth = 1;
+    for (let k = 1; k < 6; k++) { const f = k / 6; ctx.beginPath(); if (ax === 'y') { const yy = y0 + (y1 - y0) * f; ctx.moveTo(...P3(x0, yy, zz)); ctx.lineTo(...P3(x1, yy, zz)); } else { const xx = x0 + (x1 - x0) * f; ctx.moveTo(...P3(xx, y0, zz)); ctx.lineTo(...P3(xx, y1, zz)); } ctx.stroke(); }
+    ctx.setLineDash([4, 4]); poly(Q, null, hexA(c, .8), 1.4); ctx.setLineDash([]);
+    return;
+  }
+  const z = lerp(-dp, TW * 0.02, a), gird = TW * 0.06;
+  ctx.save(); ctx.globalAlpha = 0.35 + a * 0.65;
+  prism(x0, y0, x1, y1, z - gird, z, '#8a939d', '#4b525a', '#596069');
+  // coloured stripe on the girder shows which plate owns it
+  if (ax === 'y') poly([P3(x1, y0, z - gird * .65), P3(x1, y1, z - gird * .65), P3(x1, y1, z - gird * .35), P3(x1, y0, z - gird * .35)], c);
+  else poly([P3(x0, y1, z - gird * .65), P3(x1, y1, z - gird * .65), P3(x1, y1, z - gird * .35), P3(x0, y1, z - gird * .35)], c);
+  // tread plates
+  ctx.strokeStyle = 'rgba(30,34,38,.55)'; ctx.lineWidth = 1;
+  for (let k = 1; k < 6; k++) { const f = k / 6; ctx.beginPath(); if (ax === 'y') { const yy = y0 + (y1 - y0) * f; ctx.moveTo(...P3(x0, yy, z)); ctx.lineTo(...P3(x1, yy, z)); } else { const xx = x0 + (x1 - x0) * f; ctx.moveTo(...P3(xx, y0, z)); ctx.lineTo(...P3(xx, y1, z)); } ctx.stroke(); }
+  // handrails
+  if (a > 0.4) {
+    const rh = TW * 0.14 * Math.min(1, (a - .4) / .5);
+    const sides = ax === 'y' ? [[[x0, y0], [x0, y1]], [[x1, y0], [x1, y1]]] : [[[x0, y0], [x1, y0]], [[x0, y1], [x1, y1]]];
+    for (const [p, q] of sides) {
+      ctx.strokeStyle = '#c3cad1'; ctx.lineWidth = 1.6;
+      ctx.beginPath(); ctx.moveTo(...P3(p[0], p[1], z + rh)); ctx.lineTo(...P3(q[0], q[1], z + rh)); ctx.stroke();
+      for (let k = 0; k <= 2; k++) { const f = k / 2, px = lerp(p[0], q[0], f), py = lerp(p[1], q[1], f); ctx.beginPath(); ctx.moveTo(...P3(px, py, z)); ctx.lineTo(...P3(px, py, z + rh)); ctx.stroke(); }
+    }
+  }
+  ctx.restore();
+  if (a < 0.98) { // still rising out of the acid: dripping film
+    ctx.fillStyle = `rgba(150,220,50,${(1 - a) * .6})`; poly([P3(x0, y0, z), P3(x1, y0, z), P3(x1, y1, z), P3(x0, y1, z)], ctx.fillStyle);
+  }
+}
+
+// ---- pressure plate ----
+function drawPlate(d, on, time) {
+  const x = d.x, y = d.y, c = d.c === 'b' ? COL.blue : COL.red, a = anim('p' + x + ',' + y, on ? 1 : 0, 0.3);
+  const s = 0.34, z = TW * (0.045 - a * 0.032);
+  poly([P3(x - s - .04, y - s - .04, 0), P3(x + s + .04, y - s - .04, 0), P3(x + s + .04, y + s + .04, 0), P3(x - s - .04, y + s + .04, 0)], '#1c1f23');
+  prism(x - s, y - s, x + s, y + s, 0, z, hexA(c, 0.55 + a * 0.45), '#2b3036', '#353b42');
+  // chevron "step here" mark
+  const m = 0.16; ctx.strokeStyle = a > .5 ? '#fff' : 'rgba(255,255,255,.7)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(...P3(x - m, y - m, z)); ctx.lineTo(...P3(x + m, y + m, z)); ctx.moveTo(...P3(x + m, y - m, z)); ctx.lineTo(...P3(x - m, y + m, z)); ctx.stroke();
+  if (a > .05) { ctx.shadowColor = c; ctx.shadowBlur = 16 * a; poly([P3(x - s, y - s, z), P3(x + s, y - s, z), P3(x + s, y + s, z), P3(x - s, y + s, z)], null, c, 2); ctx.shadowBlur = 0; }
+}
+
+// ---- cables from controllers to what they control ----
+function buildCables(L) {
+  const out = [], used = new Map(); // tile -> number of cables already through it
+  const edgeWall = (x, y) => { for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const b = tileAt(L, x + dx, y + dy).base; if (b !== 'wall' && b !== 'void') return true; } return false; };
+  const cost = (x, y) => {
+    const t = tileAt(L, x, y); if (t.base === 'void') return Infinity;
+    let c;
+    if (t.special) c = 30; else if (t.base === 'wall') c = edgeWall(x, y) ? 1 : 1.3;
+    else if (t.base === 'solid') c = 40; else if (t.dev) c = 6; else c = t.base === 'acid' ? 2.5 : 1.8;
+    return c + (used.get(x + ',' + y) || 0) * 4;   // spread cables out where possible
+  };
+  const ids = Object.keys(L.ctrl).sort((a, b) => a - b);
+  ids.forEach((id, n) => {
+    const c = L.ctrl[id], targets = L.devs.filter(d => d.id == id && d !== c && d.t !== 'plate' && d.t !== 'console');
+    const groups = [];
+    const br = targets.filter(d => d.t === 'bridge'); if (br.length) groups.push(br);
+    targets.filter(d => d.t !== 'bridge').forEach(d => groups.push([d]));
+    for (const grp of groups) {
+      const goal = new Set(grp.map(d => d.x + ',' + d.y));
+      const dist = new Map(), prev = new Map(), start = c.x + ',' + c.y; dist.set(start, 0);
+      const open = [[0, c.x, c.y]]; let end = null;
+      while (open.length) {
+        open.sort((a, b) => a[0] - b[0]); const [dd, x, y] = open.shift(); const k = x + ',' + y;
+        if (dd > dist.get(k)) continue;
+        if (goal.has(k)) { end = k; break; }
+        for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + ox, ny = y + oy, nk = nx + ',' + ny;
+          const cc = goal.has(nk) ? 1 : cost(nx, ny); if (!isFinite(cc)) continue;
+          const nd = dd + cc; if (nd < (dist.get(nk) ?? Infinity)) { dist.set(nk, nd); prev.set(nk, k); open.push([nd, nx, ny]); }
+        }
+      }
+      if (!end) continue;
+      const path = []; for (let k = end; k; k = prev.get(k)) path.unshift(k.split(',').map(Number));
+      for (const p of path) used.set(p + '', (used.get(p + '') || 0) + 1);
+      out.push({ id, ctrl: c, path, shape: n, target: grp.find(d => d.x + ',' + d.y === end) });
+    }
+  });
+  // cables that share a tile get side-by-side lanes
+  const lanes = [0, 1, -1, 2, -2, 3, -3];
+  out.forEach((cb, i) => {
+    const mine = new Set(cb.path.map(p => p + ''));
+    const taken = new Set(out.slice(0, i).filter(o => o.path.some(p => mine.has(p + ''))).map(o => o.lane));
+    cb.lane = lanes.find(l => !taken.has(l)) ?? 0;
+  });
+  return out;
+}
+// matching symbols at both ends of each cable
+function badgeAt(x, y, z, shape, col) {
+  const [bx, by] = P3(x, y, z), r = Math.max(5, TW * 0.085);
+  ctx.fillStyle = 'rgba(12,14,17,.92)'; ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#f1f4f6'; const q = r * 0.55; ctx.beginPath();
+  switch (shape % 6) {
+    case 0: ctx.arc(bx, by, q * 0.8, 0, Math.PI * 2); break;
+    case 1: ctx.moveTo(bx, by - q); ctx.lineTo(bx + q, by + q * 0.75); ctx.lineTo(bx - q, by + q * 0.75); break;
+    case 2: ctx.rect(bx - q * 0.75, by - q * 0.75, q * 1.5, q * 1.5); break;
+    case 3: ctx.moveTo(bx, by - q * 1.05); ctx.lineTo(bx + q, by); ctx.lineTo(bx, by + q * 1.05); ctx.lineTo(bx - q, by); break;
+    case 4: for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, rr2 = k % 2 ? q * 0.45 : q * 1.05; ctx.lineTo(bx + Math.cos(a) * rr2, by + Math.sin(a) * rr2); } break;
+    default: ctx.rect(bx - q, by - q * 0.3, q * 2, q * 0.6); ctx.rect(bx - q * 0.3, by - q, q * 0.6, q * 2);
+  }
+  ctx.closePath(); ctx.fill();
+}
+function drawBadges() {
+  const zOf = d => d.t === 'plate' ? TW * 0.22 : d.t === 'console' ? TW * 0.72 : d.t === 'door' ? TW * 0.9 : d.t === 'laser' ? TW * 0.66 : TW * 0.26;
+  const seen = new Set();
+  for (const cb of G.cables) {
+    const col = cb.ctrl.c === 'b' ? COL.blue : COL.red;
+    if (!seen.has(cb.ctrl)) { seen.add(cb.ctrl); badgeAt(cb.ctrl.x, cb.ctrl.y, zOf(cb.ctrl), cb.shape, col); }
+    if (cb.target) badgeAt(cb.target.x, cb.target.y, zOf(cb.target), cb.shape, col);
+  }
+}
+function cableZ(x, y) { const t = tileAt(G.L, x, y); if (t.base === 'wall') return WALLH() + 1; if (t.base === 'solid') return TW * 0.1; if (t.base === 'acid') return TW * 0.02; return TW * 0.012; }
+function drawCableSeg(cb, i, s, time) {
+  const o = (cb.lane || 0) * 0.16, a0 = cb.path[i], b0 = cb.path[i + 1], c = cb.ctrl.c === 'b' ? COL.blue : COL.red;
+  const a = [a0[0] + o, a0[1] - o], b = [b0[0] + o, b0[1] - o];
+  const za = cableZ(a0[0], a0[1]), zb = cableZ(b0[0], b0[1]), mx = (a[0] + b[0]) / 2, my = (a[1] + b[1]) / 2;
+  // gentle sag where it spans a gap between wall tops
+  const pts = [P3(a[0], a[1], za), P3(mx, my, za), P3(mx, my, zb), P3(b[0], b[1], zb)];
+  const line = () => { ctx.beginPath(); ctx.moveTo(...pts[0]); for (let k = 1; k < 4; k++) ctx.lineTo(...pts[k]); };
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  line(); ctx.strokeStyle = '#0b0d0f'; ctx.lineWidth = Math.max(3, TW * 0.06); ctx.stroke();
+  const on = s === true, spec = s === 'spec';
+  line(); if (spec) { ctx.setLineDash([3, 4]); ctx.lineDashOffset = -time * 14; }
+  ctx.strokeStyle = hexA(c, on ? 0.95 : spec ? 0.8 : 0.4); ctx.lineWidth = Math.max(1.5, TW * 0.028); ctx.stroke(); ctx.setLineDash([]);
+  if (on) { // energy pulses travel from the controller to the device
+    const f = ((time * 2.2 - i) % 1 + 1) % 1, segs = [[0, 1], [1, 2], [2, 3]];
+    const L0 = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]), L1 = Math.abs(pts[2][1] - pts[1][1]), L2 = Math.hypot(pts[3][0] - pts[2][0], pts[3][1] - pts[2][1]);
+    let r = f * (L0 + L1 + L2), p;
+    for (const [m, n] of segs) { const ln = Math.hypot(pts[n][0] - pts[m][0], pts[n][1] - pts[m][1]) || 0.001; if (r <= ln) { p = [lerp(pts[m][0], pts[n][0], r / ln), lerp(pts[m][1], pts[n][1], r / ln)]; break; } r -= ln; }
+    if (p) { ctx.fillStyle = '#fff'; ctx.shadowColor = c; ctx.shadowBlur = 10; ctx.beginPath(); ctx.arc(p[0], p[1], Math.max(2, TW * 0.035), 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0; }
+  }
+}
+
+// ---- blast door (moves up and down) ----
+function drawDoor(d, s, time) {
+  const x = d.x, y = d.y, c = ctrlCol(d.id), ax = d.ax || (d.ax = axisAt(x, y));
+  const H = TW * 0.62, a = anim('door' + x + ',' + y, s === true ? 1 : 0, 0.22), spec = s === 'spec';
+  // door plane runs across the corridor
+  const across = ax === 'y' ? (u, v) => [x + u, y + v] : (u, v) => [x + v, y + u];
+  const box3 = (u0, u1, v0, v1, z0, z1, top, f1, f2) => { const p = across(u0, v0), q = across(u1, v1); prism(Math.min(p[0], q[0]), Math.min(p[1], q[1]), Math.max(p[0], q[0]), Math.max(p[1], q[1]), z0, z1, top, f1, f2); };
+  // slot in the floor
+  { const p = across(-0.5, -0.07), q = across(0.5, 0.07); poly([P3(p[0], p[1], 0), P3(q[0], p[1], 0), P3(q[0], q[1], 0), P3(p[0], q[1], 0)], '#0d0f11'); }
+  // far pillar
+  box3(-0.5, -0.38, -0.13, 0.13, 0, H + TW * 0.08, '#5a626c', '#2b3036', '#353b42');
+  // slab
+  const hgt = Math.max(1, (H - 2) * (1 - a));
+  if (spec) {
+    ctx.save(); ctx.globalAlpha = 0.5; ctx.setLineDash([4, 4]);
+    const p = across(-0.38, 0.07), q = across(0.38, 0.07);
+    poly([P3(p[0], p[1], 0), P3(q[0], q[1], 0), P3(q[0], q[1], H), P3(p[0], p[1], H)], hexA(c, .15), c, 1.5);
+    ctx.restore(); ctx.setLineDash([]);
+  } else {
+    box3(-0.38, 0.38, -0.06, 0.06, 0, hgt, '#9aa2ab', '#59616b', '#646d77');
+    // hazard chevrons on the visible face
+    const p = across(-0.38, 0.06), q = across(0.38, 0.06);
+    if (hgt > 4) {
+      ctx.save(); poly([P3(p[0], p[1], 0), P3(q[0], q[1], 0), P3(q[0], q[1], hgt), P3(p[0], p[1], hgt)], null); ctx.clip();
+      const n = 7; for (let k = -2; k < n + 2; k++) {
+        if (k % 2) continue; const f0 = k / n, f1 = (k + 1) / n;
+        const A = (f, z) => { const xx = lerp(p[0], q[0], f), yy = lerp(p[1], q[1], f); return P3(xx, yy, z); };
+        poly([A(f0, hgt * 0.28), A(f1, hgt * 0.28), A(f1 + 0.12, hgt * 0.58), A(f0 + 0.12, hgt * 0.58)], '#f2c230');
+      }
+      ctx.restore();
+      poly([P3(p[0], p[1], hgt * 0.28), P3(q[0], q[1], hgt * 0.28), P3(q[0], q[1], hgt * 0.24), P3(p[0], p[1], hgt * 0.24)], '#1b1e22');
+    }
+  }
+  // near pillar + lintel with status lamp
+  box3(0.38, 0.5, -0.13, 0.13, 0, H + TW * 0.08, '#5a626c', '#2b3036', '#353b42');
+  box3(-0.5, 0.5, -0.1, 0.1, H, H + TW * 0.08, '#6a737d', '#30353c', '#3b4148');
+  const lp = across(0, 0.1), [lx, ly] = P3(lp[0], lp[1], H + TW * 0.04);
+  ctx.fillStyle = s === true ? c : hexA(c, 0.35); ctx.shadowColor = c; ctx.shadowBlur = s === true ? 12 : 0;
+  ctx.beginPath(); ctx.arc(lx, ly, Math.max(2, TW * 0.035), 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+}
+
+// ---- laser gate ----
+function drawLaser(d, s, time) {
+  const x = d.x, y = d.y, c = ctrlCol(d.id), on = s === false, a = anim('las' + x + ',' + y, on ? 1 : 0, 0.35);
+  const along = d.o === 'v' ? (u, v) => [x + v, y + u] : (u, v) => [x + u, y + v];
+  const H = TW * 0.48, Z = [0.12, 0.24, 0.36].map(f => TW * f);
+  const post = (u0, u1) => { const p = along(u0, -0.12), q = along(u1, 0.12); prism(Math.min(p[0], q[0]), Math.min(p[1], q[1]), Math.max(p[0], q[0]), Math.max(p[1], q[1]), 0, H, '#3a4047', '#1d2024', '#25292e'); };
+  const e1 = along(-0.36, 0), e2 = along(0.36, 0);
+  // floor warning strip under the beam
+  { const p = along(-0.36, -0.1), q = along(0.36, 0.1); ctx.save(); poly([P3(p[0], p[1], 1), P3(q[0], p[1], 1), P3(q[0], q[1], 1), P3(p[0], q[1], 1)], on ? `rgba(255,140,40,${0.25 + 0.1 * Math.sin(time * 20)})` : 'rgba(242,194,48,.18)'); ctx.restore(); }
+  post(-0.5, -0.36);
+  for (const z of Z) {
+    const A = P3(e1[0], e1[1], z), B = P3(e2[0], e2[1], z);
+    if (a > 0.05) {
+      const fl = reduceMotion ? 1 : 0.85 + 0.15 * Math.sin(time * 40 + z);
+      ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...B);
+      ctx.strokeStyle = `rgba(255,120,30,${0.55 * a * fl})`; ctx.lineWidth = TW * 0.07; ctx.shadowColor = '#ff7a1a'; ctx.shadowBlur = 14; ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.strokeStyle = `rgba(255,245,220,${a * fl})`; ctx.lineWidth = Math.max(1.5, TW * 0.02); ctx.stroke();
+    } else if (s === 'spec') { ctx.setLineDash([3, 4]); ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...B); ctx.strokeStyle = hexA(c, .7); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]); }
+  }
+  post(0.36, 0.5);
+  // lenses and owner stripe
+  for (const e of [e1, e2]) {
+    for (const z of Z) { const [lx, ly] = P3(e[0], e[1], z); ctx.fillStyle = a > .05 ? '#fff1d6' : '#3b2a20'; ctx.shadowColor = '#ff7a1a'; ctx.shadowBlur = a > .05 ? 8 : 0; ctx.beginPath(); ctx.arc(lx, ly, Math.max(1.5, TW * 0.028), 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0; }
+    const [tx, ty] = P3(e[0], e[1], H); ctx.fillStyle = c; ctx.fillRect(tx - TW * 0.05, ty - 2, TW * 0.1, 3);
+  }
+}
+
+// ---- console terminal ----
+function drawConsole(d, on, time) {
+  const x = d.x, y = d.y, c = d.c === 'b' ? COL.blue : COL.red, a = anim('con' + x + ',' + y, on ? 1 : 0, 0.25);
+  prism(x - 0.3, y - 0.3, x + 0.3, y + 0.3, 0, TW * 0.26, '#4b525b', '#262a30', '#30353b');
+  prism(x - 0.3, y - 0.3, x + 0.3, y - 0.12, TW * 0.26, TW * 0.5, '#3d434b', '#22262b', '#2d3237');
+  // tilted screen facing the walkway (+y side)
+  const S = [P3(x - 0.26, y - 0.11, TW * 0.47), P3(x + 0.26, y - 0.11, TW * 0.47), P3(x + 0.26, y + 0.02, TW * 0.29), P3(x - 0.26, y + 0.02, TW * 0.29)];
+  ctx.shadowColor = c; ctx.shadowBlur = 18 * a; poly(S, a > 0.5 ? c : hexA(c, 0.25 + a * .5)); ctx.shadowBlur = 0;
+  ctx.save(); poly(S, null); ctx.clip();
+  ctx.strokeStyle = a > .5 ? 'rgba(255,255,255,.8)' : 'rgba(255,255,255,.25)'; ctx.lineWidth = 1;
+  for (let k = 0; k < 4; k++) { const f = ((k / 4) + (a > .5 ? time * 0.8 : 0)) % 1, w = 0.3 + hash(x, k, 3) * 0.6;
+    const A = [lerp(S[0][0], S[3][0], f), lerp(S[0][1], S[3][1], f)], B = [lerp(S[1][0], S[2][0], f), lerp(S[1][1], S[2][1], f)];
+    ctx.beginPath(); ctx.moveTo(A[0] + 3, A[1]); ctx.lineTo(lerp(A[0], B[0], w), lerp(A[1], B[1], w)); ctx.stroke(); }
+  ctx.restore();
+  poly(S, null, '#15181b', 1.5);
+  // keyboard
+  poly([P3(x - 0.22, y + 0.06, TW * 0.27), P3(x + 0.22, y + 0.06, TW * 0.27), P3(x + 0.22, y + 0.24, TW * 0.27), P3(x - 0.22, y + 0.24, TW * 0.27)], '#1d2025');
+  ctx.strokeStyle = hexA(c, 0.5 + a * 0.5); ctx.lineWidth = 1; for (let k = 1; k < 4; k++) { ctx.beginPath(); ctx.moveTo(...P3(x - 0.2, y + 0.06 + k * 0.045, TW * 0.27)); ctx.lineTo(...P3(x + 0.2, y + 0.06 + k * 0.045, TW * 0.27)); ctx.stroke(); }
+}
+
+// ---- sentry turret ----
+function drawTurret(d, pos, pk, time) {
+  const L = G.L, x = d.x, y = d.y, c = d.c === 'b' ? COL.blue : COL.red, key = 'tur' + x + ',' + y;
+  const run = pk === 'nor' ? G.n : G.s, h = run ? rawHack(L, run, d, curT(run)) : turretHacked(L, d, pos, pk);
+  // the player it is (or would be) shooting at: the active self if in sight, else whoever it can see, else the nearest
+  const dm = G.disp && G.disp.me, dg = G.disp && G.disp.ghost;
+  const active = pk === 'inv' ? pos.inv : pos.nor;
+  // red turrets guard against your inverted self, so in the forward half they watch the ghost first
+  const cands = pk === 'inv' ? [[active, dm]] : d.c === 'r' ? [[pos.inv, dg], [active, dm]] : [[active, dm], [pos.inv, dg]];
+  const sees = !h && active && canSee(L, d, active) && !G.dead;
+  let pick = sees ? cands[0] : cands.find(([p]) => p && canSee(L, d, p));
+  if (!pick) pick = cands.filter(([p]) => p).sort((A, B) => Math.hypot(A[0][0] - x, A[0][1] - y) - Math.hypot(B[0][0] - x, B[0][1] - y))[0];
+  const tgt = pick ? (pick[1] || pick[0]) : null;
+  const want = tgt ? Math.atan2(tgt[1] - y, tgt[0] - x) : 0;
+  let ang = G.anim[key] ?? want;
+  const da = ((want - ang + Math.PI * 3) % (Math.PI * 2)) - Math.PI; ang += da * 0.3;
+  G.anim[key] = ang;
+  const droop = anim(key + 'd', h ? 1 : 0, 0.12);
+  // base: hex-ish pedestal with owner ring
+  poly([P3(x - .42, y - .42, 0), P3(x + .42, y - .42, 0), P3(x + .42, y + .42, 0), P3(x - .42, y + .42, 0)], '#1b1e22');
+  prism(x - 0.3, y - 0.3, x + 0.3, y + 0.3, 0, TW * 0.1, '#4b525b', '#25292e', '#2f343a');
+  poly([P3(x - .3, y - .3, TW * .1), P3(x + .3, y - .3, TW * .1), P3(x + .3, y + .3, TW * .1), P3(x - .3, y + .3, TW * .1)], null, c, 2);
+  // post
+  prism(x - 0.09, y - 0.09, x + 0.09, y + 0.09, TW * 0.1, TW * 0.34, '#3a4047', '#1f2226', '#282c31');
+  // head: a box rotated toward the aim, drawn as a few points
+  const zH = TW * 0.44, ca = Math.cos(ang), sa = Math.sin(ang);
+  const R = (u, v, z) => P3(x + u * ca - v * sa, y + u * sa + v * ca, z);
+  const hb = [[-0.3, -0.26], [0.24, -0.26], [0.24, 0.26], [-0.3, 0.26]];
+  const tp = hb.map(([u, v]) => R(u, v, zH + TW * 0.13)), bt = hb.map(([u, v]) => R(u, v, zH - TW * 0.08));
+  for (let k = 0; k < 4; k++) { const k2 = (k + 1) % 4; poly([bt[k], bt[k2], tp[k2], tp[k]], k % 2 ? '#2a2f35' : '#343a41'); }
+  poly(tp, '#5b636d', '#20242a', 1);
+  // hazard stripe on top
+  poly([R(-0.08, -0.26, zH + TW * .13), R(0.04, -0.26, zH + TW * .13), R(0.04, 0.26, zH + TW * .13), R(-0.08, 0.26, zH + TW * .13)], h ? hexA(c, .9) : '#f2c230');
+  // twin barrels (droop when hacked)
+  ctx.lineCap = 'round';
+  for (const v of [-0.12, 0.12]) {
+    const a0 = R(0.2, v, zH + TW * 0.02), a1 = R(0.7, v, zH + TW * 0.02 - droop * TW * 0.2);
+    ctx.strokeStyle = '#121417'; ctx.lineWidth = TW * 0.085; ctx.beginPath(); ctx.moveTo(...a0); ctx.lineTo(...a1); ctx.stroke();
+    ctx.strokeStyle = '#7b848d'; ctx.lineWidth = TW * 0.035; ctx.beginPath(); ctx.moveTo(...a0); ctx.lineTo(...a1); ctx.stroke();
+  }
+  // sensor eye
+  const eye = R(0.25, 0, zH + TW * 0.04), blink = sees ? (Math.sin(time * 18) > 0 ? 1 : 0.5) : 1;
+  const eyeC = h ? (Math.random() < 0.25 ? '#ffffff' : c) : HAZ;
+  ctx.fillStyle = eyeC; ctx.globalAlpha = blink; ctx.shadowColor = eyeC; ctx.shadowBlur = 12;
+  ctx.beginPath(); ctx.arc(eye[0], eye[1], Math.max(2.5, TW * 0.055), 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  // laser sight on its target
+  if (sees && tgt) {
+    const [tx, ty] = P3(tgt[0], tgt[1], TW * 0.35);
+    ctx.strokeStyle = 'rgba(255,178,58,.45)'; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(...R(0.7, 0, zH + TW * 0.02)); ctx.lineTo(tx, ty); ctx.stroke(); ctx.setLineDash([]);
+  }
+  if (h) {
+    if (!reduceMotion && Math.random() < 0.35) { const sp = R((Math.random() - .5) * .4, (Math.random() - .5) * .4, zH + TW * .1); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(sp[0], sp[1]); ctx.lineTo(sp[0] + (Math.random() - .5) * 10, sp[1] - Math.random() * 8); ctx.stroke(); }
+    ctx.fillStyle = hexA(c, 0.95); ctx.font = `600 ${Math.max(10, TW * 0.15)}px Saira Semi Condensed, sans-serif`; ctx.textAlign = 'center';
+    const [lx, ly] = P3(x, y, zH + TW * 0.36); ctx.fillText(h === 'spec' ? 'hacked later' : 'hacked', lx, ly);
+  }
+}
+
+function agentAt(p, kind, face, moving, ph, alpha, time, ghost, die) {
+  const [sx, sy] = P(p[0], p[1]);
+  if (ghost && !reduceMotion) for (let k = 2; k >= 1; k--) drawAgent(sx + k * 3, sy + k * 2, kind, face, ph, alpha * 0.1 * (3 - k), moving, time, null, true);
+  drawAgent(sx, sy, kind, face, ph, alpha, moving, time, die, false, ghost);
+}
+const easeIO = k => k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+function limb(x0, y0, a1, l1, a2, l2, w1, w2, col) {
+  const kx = x0 + Math.sin(a1) * l1, ky = y0 + Math.cos(a1) * l1, fx = kx + Math.sin(a2) * l2, fy = ky + Math.cos(a2) * l2;
+  ctx.strokeStyle = col; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.lineWidth = w1; ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(kx, ky); ctx.stroke();
+  ctx.lineWidth = w2; ctx.beginPath(); ctx.moveTo(kx, ky); ctx.lineTo(fx, fy); ctx.stroke();
+  return [fx, fy, a2];
+}
+function drawAgent(sx, sy, kind, face, ph, alpha, moving, time, die, flat, ghost) {
+  const u = TW, c = kind === 'inv' ? COL.blue : COL.red;
+  const front = face === 'down' || face === 'right', flip = (face === 'down' || face === 'left') ? -1 : 1;
+  // ---- pose ----
+  const t2 = ph * Math.PI * 2;
+  let sw = moving ? Math.sin(t2) : 0;                      // stride
+  let bob = moving ? Math.abs(Math.cos(t2)) * u * 0.025 : Math.sin(time * 2.2) * u * 0.006;
+  let lean = moving ? 0.1 : 0, crouch = 0, armsUp = 0, rot = 0, sink = 0, shake = 0, fade = 1;
+  const breathe = Math.sin(time * (kind === 'inv' ? 3.2 : 2.2)) * 0.5 + 0.5;
+  if (die) {
+    const k = die.k; moving = false; sw = 0; bob = 0;
+    if (die.type === 'choke') {           // clutch the mask, buckle, keel over
+      armsUp = Math.min(1, k / 0.25); shake = k < 0.55 ? Math.sin(time * 40) * u * 0.008 * (1 - k) : 0;
+      crouch = Math.min(1, Math.max(0, (k - 0.3) / 0.3)) * 0.6 * (1 - Math.min(1, Math.max(0, (k - 0.75) / 0.25)));
+      rot = easeIO(Math.min(1, Math.max(0, (k - 0.5) / 0.4))) * Math.PI / 2;
+    } else if (die.type === 'fall') {
+      shake = k < 0.2 ? Math.sin(time * 50) * u * 0.01 : 0; crouch = Math.min(1, k / 0.3) * 0.3;
+      rot = easeIO(Math.min(1, Math.max(0, (k - 0.15) / 0.6))) * Math.PI / 2; armsUp = 0.3;
+    } else if (die.type === 'sink') { sink = easeIO(k) * u * 0.9; armsUp = Math.min(1, k * 2); }
+    else if (die.type === 'vanish') { fade = 1 - k; }
+  }
+  ctx.save(); ctx.globalAlpha = alpha * fade; ctx.translate(sx + shake, sy);
+  // shadow (stays on the floor)
+  ctx.fillStyle = `rgba(0,0,0,${flat ? 0 : 0.38 * (1 - sink / u)})`; ctx.beginPath();
+  ctx.ellipse(0, 0, u * (0.16 + rot * 0.12), u * 0.065, 0, 0, Math.PI * 2); ctx.fill();
+  if (sink) { ctx.beginPath(); ctx.rect(-u, -u * 2, u * 2, u * 2 + u * 0.03); ctx.clip(); ctx.translate(0, sink); }
+  ctx.scale(flip, 1);
+  if (rot) { ctx.rotate(rot); }
+  const hipY = -u * (0.29 - crouch * 0.1) - bob;
+  const dark = '#121418', mid = '#1b1e23', cloth = kind === 'inv' ? '#1a1d22' : '#1d1b1d';
+  const legL = u * 0.135;
+  // far leg & arm
+  const bend = a => moving ? Math.max(0, Math.cos(a)) * 0.9 : crouch * 1.4;
+  const farA = sw * 0.45 - crouch * 0.6, nearA = -sw * 0.45 - crouch * 0.6;
+  const [bfx, bfy] = limb(-u * 0.03, hipY, farA, legL, farA - bend(t2 + Math.PI), legL, u * 0.07, u * 0.06, '#0e1013');
+  ctx.fillStyle = '#08090b'; rr(bfx - u * 0.03, bfy - u * 0.02, u * 0.065, u * 0.032, u * 0.012); ctx.fill();
+  const shY = hipY - u * 0.25;
+  const armSw = (s) => s * 0.5;
+  const farArm = lerp(armSw(-sw) + lean, 1.75, armsUp), farFore = lerp(farArm + 0.5, 3.05, armsUp);
+  limb(-u * 0.07, shY + u * 0.03, farArm, u * 0.11, farFore, u * 0.1, u * 0.055, u * 0.05, '#0f1114');
+  // oxygen tank (inverted) or radio pack (normal) sits behind the torso
+  ctx.save(); ctx.translate(0, hipY); ctx.rotate(lean);
+  if (kind === 'inv') {
+    const tx = front ? -u * 0.1 : -u * 0.04;
+    ctx.fillStyle = '#2c323a'; rr(tx - u * 0.06, -u * 0.27, u * 0.12, u * 0.24, u * 0.055); ctx.fill();
+    ctx.strokeStyle = hexA(c, 0.7); ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.fillStyle = '#596270'; rr(tx - u * 0.03, -u * 0.3, u * 0.06, u * 0.04, u * 0.01); ctx.fill();
+    // O2 gauge
+    const lvl = G.mode === 'inv' && G.s ? Math.max(0, 1 - G.s.i / G.L.def.o2) : 0.6;
+    ctx.fillStyle = '#0c0e10'; ctx.fillRect(tx - u * 0.015, -u * 0.22, u * 0.03, u * 0.14);
+    ctx.fillStyle = lvl < 0.25 ? COL.red : c; ctx.fillRect(tx - u * 0.015, -u * 0.08 - u * 0.14 * lvl, u * 0.03, u * 0.14 * lvl);
+  } else if (!front) {
+    ctx.fillStyle = '#262a30'; rr(-u * 0.08, -u * 0.24, u * 0.13, u * 0.16, u * 0.03); ctx.fill();
+    ctx.strokeStyle = '#3a3f46'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(-u * 0.05, -u * 0.24); ctx.lineTo(-u * 0.07, -u * 0.36); ctx.stroke();
+  }
+  // torso: plate carrier over a fitted suit
+  const tw = u * 0.2 + breathe * u * 0.006, th = u * 0.27;
+  ctx.shadowColor = c; ctx.shadowBlur = ghost ? 16 : 9;
+  const g = ctx.createLinearGradient(-tw / 2, 0, tw / 2, 0); g.addColorStop(0, cloth); g.addColorStop(1, '#2a2e35');
+  ctx.fillStyle = g; ctx.beginPath();
+  ctx.moveTo(-u * 0.075, 0); ctx.lineTo(u * 0.075, 0); ctx.quadraticCurveTo(tw / 2 + u * 0.01, -th * 0.6, tw / 2, -th); ctx.lineTo(-tw / 2, -th); ctx.quadraticCurveTo(-tw / 2 - u * 0.01, -th * 0.6, -u * 0.075, 0); ctx.closePath(); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = hexA(c, 0.9); ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(tw / 2, -th); ctx.quadraticCurveTo(tw / 2 + u * 0.01, -th * 0.6, u * 0.075, 0); ctx.stroke(); // rim light
+  ctx.fillStyle = '#0e1013'; ctx.fillRect(-u * 0.08, -u * 0.035, u * 0.16, u * 0.03);                              // belt
+  if (front) {
+    ctx.fillStyle = '#2d323a'; rr(-u * 0.075, -th + u * 0.04, u * 0.15, u * 0.13, u * 0.02); ctx.fill();             // chest plate
+    ctx.fillStyle = '#23272d'; for (let k = 0; k < 3; k++) rr(-u * 0.07 + k * u * 0.05, -u * 0.1, u * 0.04, u * 0.05, u * 0.008), ctx.fill(); // pouches
+    ctx.fillStyle = c; ctx.shadowColor = c; ctx.shadowBlur = 6; ctx.fillRect(-u * 0.05, -th + u * 0.12, u * 0.1, u * 0.018); ctx.shadowBlur = 0; // team stripe
+  } else {
+    ctx.strokeStyle = '#2f343b'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-u * 0.07, -th + u * 0.02); ctx.lineTo(u * 0.05, -u * 0.04); ctx.stroke();
+  }
+  ctx.restore();
+  // near leg
+  const [fx, fy] = limb(u * 0.03, hipY, nearA, legL, nearA - bend(t2), legL, u * 0.075, u * 0.065, '#15181c');
+  ctx.fillStyle = '#0a0b0d'; rr(fx - u * 0.03, fy - u * 0.02, u * 0.07, u * 0.035, u * 0.012); ctx.fill();
+  // head
+  const hx = Math.sin(lean) * u * 0.28, hy = shY - u * 0.085 + crouch * u * 0.02;
+  ctx.fillStyle = '#16181c'; ctx.fillRect(hx - u * 0.025, hy + u * 0.04, u * 0.05, u * 0.04);                         // neck
+  ctx.fillStyle = mid; ctx.beginPath(); ctx.arc(hx, hy, u * 0.082, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = hexA(c, 0.55); ctx.lineWidth = 1; ctx.stroke();
+  if (kind === 'inv') {
+    // hood edge
+    ctx.fillStyle = '#20242a'; ctx.beginPath(); ctx.arc(hx, hy - u * 0.01, u * 0.086, Math.PI * 1.05, Math.PI * 1.95); ctx.fill();
+    if (front) {
+      ctx.fillStyle = '#2e333b'; ctx.beginPath(); ctx.ellipse(hx + u * 0.035, hy + u * 0.012, u * 0.06, u * 0.068, 0.1, 0, Math.PI * 2); ctx.fill();
+      const glow = 0.7 + 0.3 * breathe; ctx.fillStyle = hexA(c, glow); ctx.shadowColor = c; ctx.shadowBlur = 9;
+      ctx.beginPath(); ctx.arc(hx + u * 0.015, hy - u * 0.012, u * 0.021, 0, Math.PI * 2); ctx.arc(hx + u * 0.068, hy - u * 0.012, u * 0.019, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+      // filter canister
+      ctx.fillStyle = '#434a54'; ctx.save(); ctx.translate(hx + u * 0.06, hy + u * 0.058); ctx.rotate(-0.4); rr(-u * 0.028, -u * 0.022, u * 0.056, u * 0.05, u * 0.012); ctx.fill();
+      ctx.fillStyle = '#1b1e22'; ctx.fillRect(-u * 0.02, u * 0.005, u * 0.04, u * 0.006); ctx.fillRect(-u * 0.02, u * 0.016, u * 0.04, u * 0.006); ctx.restore();
+    }
+    // breathing hose from mask to tank
+    ctx.strokeStyle = '#3a414a'; ctx.lineWidth = u * 0.022; ctx.lineCap = 'round'; ctx.beginPath();
+    ctx.moveTo(hx + (front ? u * 0.04 : -u * 0.02), hy + u * 0.07); ctx.quadraticCurveTo(hx - u * 0.12, hy + u * 0.12, -u * 0.09, hipY - u * 0.24); ctx.stroke();
+  } else {
+    // helmet with red visor
+    ctx.fillStyle = '#24282e'; ctx.beginPath(); ctx.arc(hx, hy - u * 0.008, u * 0.088, Math.PI, Math.PI * 2); ctx.fill();
+    ctx.fillRect(hx - u * 0.088, hy - u * 0.012, u * 0.176, u * 0.012);
+    if (front) {
+      ctx.fillStyle = c; ctx.shadowColor = c; ctx.shadowBlur = 9; rr(hx - u * 0.005, hy - u * 0.008, u * 0.088, u * 0.032, u * 0.014); ctx.fill(); ctx.shadowBlur = 0;
+      ctx.fillStyle = '#2b2f36'; ctx.beginPath(); ctx.arc(hx - u * 0.06, hy + u * 0.005, u * 0.02, 0, Math.PI * 2); ctx.fill(); // earpiece
+    } else { ctx.fillStyle = hexA(c, .7); ctx.fillRect(hx - u * 0.05, hy - u * 0.05, u * 0.05, u * 0.012); }
+  }
+  // near arm
+  const nearArm = lerp(armSw(sw) + lean, 1.5, armsUp), nearFore = lerp(nearArm + 0.55, 2.85, armsUp);
+  const [gx, gy] = limb(u * 0.075, shY + u * 0.03, nearArm, u * 0.11, nearFore, u * 0.1, u * 0.058, u * 0.052, '#1a1d22');
+  ctx.fillStyle = '#0c0d10'; ctx.beginPath(); ctx.arc(gx, gy, u * 0.025, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+function shotLine(tu, at, f, c) {
+  const [tx, ty] = P(tu.x, tu.y), [ix, iy] = P(at[0], at[1]);
+  const a = [tx, ty - TW * 0.36], b = [ix, iy - TW * 0.25];
+  const px = lerp(a[0], b[0], f), py = lerp(a[1], b[1], f), qx = lerp(a[0], b[0], Math.max(0, f - 0.15)), qy = lerp(a[1], b[1], Math.max(0, f - 0.15));
+  ctx.strokeStyle = c; ctx.lineWidth = 3; ctx.shadowColor = c; ctx.shadowBlur = 10; ctx.beginPath(); ctx.moveTo(qx, qy); ctx.lineTo(px, py); ctx.stroke(); ctx.shadowBlur = 0;
+}
+function spark(at, k, c) { const [ix, iy] = P(at[0], at[1]); ctx.fillStyle = hexA(c, k); ctx.beginPath(); ctx.ellipse(ix, iy, TW * 0.25 * (1.2 - k), TW * 0.12 * (1.2 - k), 0, 0, Math.PI * 2); ctx.fill(); }
+function drawShots(tn, pk) {
+  const L = G.L;
+  const list = pk === 'inv' ? (G.s ? G.s.shots : []) : (G.n ? G.n.shots : []);
+  for (const sh of list) {
+    const f = (tn - sh.fire) / (sh.land - sh.fire);
+    if (f >= 0 && f <= 1) shotLine(L.turrets[sh.tur], sh.at, f, '#ffcf6a');
+    const k = 1 - Math.abs(tn - sh.land) * 2; if (k > 0) spark(sh.at, k, '#ffcf6a');
+  }
+  if (pk === 'nor' && G.n) for (const sh of G.n.invShots) { // ghost's shots, played backwards
+    const gf = G.n.T - sh.fire, gl = G.n.T - sh.land;
+    const f = (tn - gl) / (gf - gl);
+    if (f >= 0 && f <= 1) shotLine(L.turrets[sh.tur], sh.at, 1 - f, hexA(COL.blue, 0.9));
+    const k = 1 - Math.abs(tn - gl) * 2; if (k > 0) spark(sh.at, k, COL.blue);
+  }
+}
+function burst(at, c) { const [x, y] = P(at[0], at[1]); for (let i = 0; i < 40; i++) G.parts.push({ x, y: y - TW * 0.3, vx: (Math.random() - .5) * 6, vy: -Math.random() * 6, life: 1, c, big: true }); }
+function drawParts(pk) {
+  if (!reduceMotion && G.mode !== 'title' && Math.random() < 0.5 && G.parts.length < 160) G.parts.push({ x: Math.random() * VW, y: pk === 'inv' ? VH + 5 : -5, vx: 0, vy: pk === 'inv' ? -(0.3 + Math.random() * 0.5) : (0.3 + Math.random() * 0.5), life: 1, c: pk === 'inv' ? COL.blue : COL.red });
+  G.parts = G.parts.filter(p => p.life > 0 && p.y > -10 && p.y < VH + 10);
+  for (const p of G.parts) {
+    p.x += p.vx; p.y += p.vy; if (p.big) { p.vy += 0.25; p.life -= 0.025; } else p.life -= 0.002;
+    ctx.fillStyle = hexA(p.c, (p.big ? 1 : 0.25) * p.life); ctx.fillRect(p.x, p.y, p.big ? 3 : 1.5, p.big ? 3 : 1.5);
+  }
+}
+
+function orientControls() {
+  const V = { up: [0, -1], right: [1, 0], down: [0, 1], left: [-1, 0] }, ang = {};
+  for (const k in V) { const [dx, dy] = V[k]; ang[k] = Math.atan2((dx * SA + dy * CA) / 2, dx * CA - dy * SA); }
+  document.querySelectorAll('.pad button').forEach(b => {
+    const a = ang[b.dataset.dir]; b.style.left = (69 + Math.cos(a) * 70) + 'px'; b.style.top = (69 + Math.sin(a) * 70) + 'px';
+    b.style.right = 'auto'; b.style.bottom = 'auto'; b.querySelector('span').style.transform = `rotate(${a + Math.PI / 2}rad)`;
+  });
+  const arrow = k => `<span style="display:inline-block;transform:rotate(${ang[k] + Math.PI / 2}rad)">↑</span>`;
+  $('compass').innerHTML = `↑ ${arrow('up')}&nbsp; → ${arrow('right')}&nbsp; ↓ ${arrow('down')}&nbsp; ← ${arrow('left')}&nbsp; · M sound`;
+}
+$('mute').onclick = () => { setMuted(!muted); if (!muted) sfx('ui'); };
+setMuted(muted); orientControls();
+resize(); showTitle(); requestAnimationFrame(frame);
+
+</script>
+</body>
+</html>
